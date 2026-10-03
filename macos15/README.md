@@ -7,7 +7,7 @@ disk. You install macOS by hand in the web viewer. Then one script sets up the r
 |---|---|
 | `launch-macos.sh` | creates and starts the container |
 | `shared/setup-macos.sh` | sets up macOS after you install it |
-| `snapshot-macos.sh` | saves and restores snapshots of the VM, to start again from a known state |
+| `snapshot-macos.sh` | saves and restores snapshots of the VM, to start again from a known state. It runs `../snapshot-vm.sh`, which the Windows VM uses too |
 | `snapshots/` | the snapshots (created by `snapshot-macos.sh`) |
 | `logs/` | logs kept for reference, such as the first VM run |
 | `shared/Xcode_*.xip` | **you add this**: the Xcode download (see step 3) |
@@ -20,7 +20,8 @@ disk. You install macOS by hand in the web viewer. Then one script sets up the r
 | VNC | 127.0.0.1:5900 |
 | ssh | 127.0.0.1:2223 |
 
-The `windows11` container uses 8006, 3389 and 2222, so this VM uses different ports.
+The `windows11` container uses 8006, 3389 and 2222, so this VM uses different ports. The VM runs
+as you, in rootless Podman. To start it at boot as a systemd service, see *Run at boot* below.
 
 ## Quick start
 
@@ -239,6 +240,20 @@ installed raw disk is not converted. These are the trade-offs:
 
 If you want qcow2 anyway, start the VM with `DISK_FMT=qcow2 ./launch-macos.sh` for the first
 launch. `snapshot-macos.sh` still works with it, because it copies the whole of `macos-data/`.
+
+### Run at boot (systemd)
+
+`../install.sh macos15` makes a systemd **user** service, `macos15.service`, with the same settings
+as the launcher, and turns on lingering so the VM starts when the computer starts, with nobody
+logged in. `../README.md` explains how it works. Run it **after** macOS is installed, so that the
+service gets the full 16 GB (an AMD host gets 8 GB until a data disk exists).
+
+- From then on use `systemctl --user start|stop|status macos15.service`, not the launcher. Stopping
+  is a clean shutdown and takes up to 2.5 minutes. Do not run both: they use the same disk.
+- `install.sh` offers to remove the container the launcher made, and keeps the disk.
+- If you shut macOS down from inside, the service does not restart it. A crash does restart it.
+- `snapshot-macos.sh` sees the service, and stops and starts the VM through it.
+- To change RAM or CPUs: `RAM_SIZE=12G ../install.sh macos15`, then restart the service.
 
 ### Wipe and reinstall
 
