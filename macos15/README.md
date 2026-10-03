@@ -165,7 +165,7 @@ To put a copy in the shared folder, run `sudo cp ~/setup-macos.log /Volumes/shar
 --packages=auto|homebrew|hybrid
 --skip-tuning  --skip-formulae  --skip-casks  --skip-wallpaper
 --skip-dock    --skip-ssh       --skip-xcode    --skip-shell    --skip-bashrc
---skip-go      --update-go     --skip-autologin
+--skip-go      --update-go     --skip-autologin   --skip-keyboard
 ```
 
 `--update-go` runs `go-setup.sh` again when Go is already installed. Without it, an existing
@@ -176,6 +176,7 @@ Go is left alone.
 | variable | effect |
 |---|---|
 | `PACKAGES` | the same as `--packages` |
+| `KEYBOARD_TYPE` | `ansi` (the default), `iso` or `jis`: the keyboard layout to save (see Keyboard layout) |
 | `AUTOLOGIN_USER` | the account that logs in by itself, in place of the one that runs the script |
 | `DEFAULT_SHELL` | the bash to make the login shell, in place of the one Homebrew or MacPorts installed |
 | `GO_SETUP_SCRIPT` | a `go-setup.sh` to run, in place of the downloaded one |
@@ -425,6 +426,8 @@ It runs second, so the VM does not sleep or lock during the long installs.
 - **Natural scrolling** is off, so the mouse wheel scrolls the usual way. It is one
   setting for the mouse and the trackpad.
 - **Spotlight indexing and Time Machine** are off. They use CPU and disk for nothing.
+- **The keyboard layout is saved**, so the Keyboard Setup Assistant stops asking at every start.
+  See below.
 - **Automatic login** is on: the VM goes straight to the desktop of the account that ran the
   script, after a restart or a crash, with nobody to type a password. See below.
 - **Dialogs nobody can answer** are off: the Bluetooth keyboard pairing window, the
@@ -434,6 +437,27 @@ Reduce Motion, Reduce Transparency and the scroll direction show only after you 
 out and in. macOS refuses some settings. The script lists them at the end. For
 Reduce Motion and Reduce Transparency, set them in **System Settings >
 Accessibility > Display**.
+
+### Keyboard layout
+
+The VM's keyboard is a virtual USB keyboard from QEMU. It does not say whether it is ANSI, ISO or
+JIS, so macOS runs the **Keyboard Setup Assistant** to ask, and it asks again at a start if it has
+no saved answer. macOS keeps the answer in `/Library/Preferences/com.apple.keyboardtype.plist`, under
+the name `<vendor id>-<product id>-<country code>`, as a number: 40 is ANSI, 41 is ISO, 42 is JIS.
+
+The tuning phase writes that answer for every keyboard macOS can see (found with `ioreg`), and for
+QEMU's keyboard (`1575-1-0`) in case it is not connected yet, and then closes an Assistant that is
+open. It skips what is saved already. `KEYBOARD_TYPE=iso` or `jis` picks another layout, and
+`--skip-keyboard` skips the step.
+
+By hand, in the VM: `sudo defaults write /Library/Preferences/com.apple.keyboardtype keyboardtype
+-dict-add 1575-1-0 -int 40` (take the numbers from `ioreg -r -c IOHIDDevice -l | grep -E
+'VendorID|ProductID|CountryCode'`). Or answer the Assistant to the end: press Z when it asks for the
+key right of the left Shift, then / for the key left of the right Shift.
+
+**Not tested in a real VM yet:** the step was tested with fake `ioreg` and `defaults` output. If the
+Assistant still comes up after a restart, run the commands above and look at what
+`sudo defaults read /Library/Preferences/com.apple.keyboardtype` shows.
 
 ### Automatic login
 

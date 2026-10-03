@@ -53,6 +53,7 @@
 #                       [--skip-wallpaper] [--skip-dock] [--skip-ssh]
 #                       [--skip-xcode] [--skip-shell] [--skip-bashrc]
 #                       [--skip-go] [--update-go] [--skip-autologin]
+#                       [--skip-keyboard]
 #
 # --packages (or PACKAGES in the environment) says how the command line tools are
 # installed:
@@ -74,6 +75,8 @@
 # --update-go runs it again when Go is already installed; otherwise it is skipped.
 # AUTOLOGIN_USER in the environment names the account that logs in by itself, in place
 # of the one that runs this script.
+# KEYBOARD_TYPE in the environment is ansi (the default), iso or jis: the keyboard layout
+# that is saved so that the Keyboard Setup Assistant stops asking. See phase 2.
 # DEFAULT_SHELL in the environment names the bash to make the login shell, in place
 # of the one that Homebrew or MacPorts installed.
 # PUBLIC_KEY in the environment replaces the key that is authorized for ssh.
@@ -225,6 +228,7 @@ SKIP_SHELL=0
 SKIP_BASHRC=0
 SKIP_GO=0
 SKIP_AUTOLOGIN=0
+SKIP_KEYBOARD=0
 UPDATE_GO=0
 SKIP_FORMULAE=0
 SKIP_CASKS=0
@@ -240,6 +244,7 @@ for arg in "$@"; do
         --skip-bashrc)   SKIP_BASHRC=1 ;;
         --skip-go)       SKIP_GO=1 ;;
         --skip-autologin) SKIP_AUTOLOGIN=1 ;;
+        --skip-keyboard) SKIP_KEYBOARD=1 ;;
         --update-go)     UPDATE_GO=1 ;;
         --skip-formulae) SKIP_FORMULAE=1 ;;
         --skip-casks)    SKIP_CASKS=1 ;;
@@ -351,6 +356,59 @@ trap 'kill "$SUDO_KEEPALIVE" 2>/dev/null' EXIT
 
 # ----[ automatic login ]-------------------------------------------------------
 
+KEYBOARD_PLIST="${KEYBOARD_PLIST:-/Library/Preferences/com.apple.keyboardtype}"
+KEYBOARD_TYPE="${KEYBOARD_TYPE:-ansi}"
+
+# keyboard_ids: one "vendor-product-country" for each keyboard macOS can see. The
+# Keyboard Setup Assistant saves its answer under that name, and a QEMU keyboard does
+# not say which layout it has, so macOS asks again whenever the answer is missing.
+# A keyboard is a HID device with usage page 1 and usage 6. The ids are in decimal.
+keyboard_ids() {
+    ioreg -r -c IOHIDDevice -l -w0 2>/dev/null | awk '
+        function flush() { if (page == 1 && usage == 6 && vendor != "" && product != "") print vendor "-" product "-" (country == "" ? 0 : country) }
+        /\+-o / { flush(); vendor = product = country = page = usage = "" }
+        /"VendorID" = /        { vendor = $NF }
+        /"ProductID" = /       { product = $NF }
+        /"CountryCode" = /     { country = $NF }
+        /"PrimaryUsagePage" = / { page = $NF }
+        /"PrimaryUsage" = /    { usage = $NF }
+        END { flush() }' | sort -u
+}
+
+# set_keyboard_type: saves the layout for every keyboard that is connected now, and for
+# the QEMU keyboard (1575-1-0), so that the Keyboard Setup Assistant does not come up at
+# every start. The values are 40 for ANSI, 41 for ISO and 42 for JIS.
+set_keyboard_type() {
+    local code id ids missing=0 now
+    step "keyboard layout: $KEYBOARD_TYPE"
+    case "$KEYBOARD_TYPE" in
+        ansi|ANSI) code=40 ;;
+        iso|ISO)   code=41 ;;
+        jis|JIS)   code=42 ;;
+        *) fail "KEYBOARD_TYPE is '$KEYBOARD_TYPE'; use ansi, iso or jis"; return 0 ;;
+    esac
+    ids="$(printf '%s\n%s\n' "$(keyboard_ids)" '1575-1-0' | sed '/^$/d' | sort -u)"
+    now="$(sudo defaults read "$KEYBOARD_PLIST" keyboardtype 2>/dev/null || true)"
+    for id in $ids; do
+        if printf '%s\n' "$now" | grep -Eq "\"?$id\"? = $code;"; then
+            continue
+        fi
+        missing=1
+        if sudo defaults write "$KEYBOARD_PLIST" keyboardtype -dict-add "$id" -int "$code"; then
+            ok "saved $id as $KEYBOARD_TYPE ($code)"
+        else
+            fail "could not save the keyboard layout for $id"
+        fi
+    done
+    if [ "$missing" = 0 ]; then
+        skip "already saved for: $(echo $ids)"
+        return 0
+    fi
+    # an Assistant that is open now has nothing left to ask
+    pkill -x KeyboardSetupAssistant 2>/dev/null || true
+    note "keyboard layout saved as $KEYBOARD_TYPE; if the Keyboard Setup Assistant still comes up after a restart, run it through once (press Z, then /) and tell the maintainers"
+}
+
 KCPASSWORD="${KCPASSWORD:-/etc/kcpassword}"
 AUTOLOGIN_USER="${AUTOLOGIN_USER:-$USER}"
 
@@ -424,6 +482,9 @@ if [ "$SKIP_TUNING" = 0 ]; then
     tune 'automatic logout' sudo defaults write /Library/Preferences/.GlobalPreferences com.apple.autologout.AutoLogOutDelay -int 0
     tune 'login window screen lock' defaults write com.apple.loginwindow DisableScreenLock -bool true
     tune 'login window screen lock (system)' sudo defaults write /Library/Preferences/com.apple.loginwindow DisableScreenLock -bool true
+    if [ "$SKIP_KEYBOARD" = 0 ]; then
+        set_keyboard_type
+    fi
     if [ "$SKIP_AUTOLOGIN" = 0 ]; then
         set_autologin
     fi
