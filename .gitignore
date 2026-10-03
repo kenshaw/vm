@@ -1,0 +1,16 @@
+# VM disks, recovery images, boot disks and machine identity (hundreds of GB)
+macos15/macos-data/
+win11/windows-data/
+
+# snapshots of the VM disks, and the folders the snapshot tools work in
+macos15/snapshots/
+win11/snapshots/
+macos15/.macos-data.restoring/
+win11/.windows-data.restoring/
+
+# Xcode, which is downloaded by hand (2.7 GB)
+*.xip
+
+# logs: the setup scripts write them, and they are kept for reference only
+logs/
+*.log
