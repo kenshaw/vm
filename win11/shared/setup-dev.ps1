@@ -29,6 +29,11 @@ param(
     # ssh public key authorized for inbound ssh (default: ken@ken-desktop)
     [string]$PublicKey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG0VpXyS7XSOtkyobD0p97mqbDIst0bBz74f+aDzafV+ ken@ken-desktop',
 
+    # the Windows account that the install made (dockur's USERNAME; see ../launch-windows.sh).
+    # It gets the ssh key in its profile, and it is the account to log in as. Without it, the
+    # script uses the one normal local account that the install makes, or 'user' if it cannot tell
+    [string]$User = '',
+
     # shell sshd hands to inbound connections
     [ValidateSet('pwsh', 'powershell', 'bash', 'cmd')]
     [string]$DefaultShell = 'pwsh',
@@ -73,6 +78,29 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administra
     exit
 }
 
+# ----[ log ]-------------------------------------------------------------------
+
+# Everything this script prints is also written to a transcript. It starts in C:\OEM (which
+# dockur makes from the shared folder) and is copied to the shared folder, where the host
+# can read it, when the script ends or is about to reboot. Each run adds to the same log.
+$script:LogFile = Join-Path $(if (Test-Path "$env:SystemDrive\OEM") { "$env:SystemDrive\OEM" } else { $env:ProgramData }) 'setup-dev.log'
+try { Start-Transcript -Path $script:LogFile -Append | Out-Null }
+catch { Write-Host "no log: $($_.Exception.Message)" -ForegroundColor Yellow }
+
+# Save-Log: flush the transcript and copy it to the shared folder. Drive Z: belongs to a
+# logged-in user, so the first run (as SYSTEM) may only find the network name.
+function Save-Log {
+    try { Stop-Transcript | Out-Null } catch { }
+    foreach ($share in @('Z:\', '\\host.lan\Data\')) {
+        if (Test-Path -LiteralPath $share) {
+            try {
+                Copy-Item -LiteralPath $script:LogFile -Destination (Join-Path $share 'setup-dev.log') -Force
+                break
+            } catch { }
+        }
+    }
+}
+
 # ----[ output helpers ]--------------------------------------------------------
 
 $script:Failures = New-Object System.Collections.Generic.List[string]
@@ -94,6 +122,17 @@ function Write-Fail($msg) {
     $script:Failures.Add($msg)
 }
 function Add-Note($msg) { $script:Notes.Add($msg) }
+
+# ----[ the account ]-----------------------------------------------------------
+
+# A normal local account has a SID that ends in a number of 1000 or more. The built-in ones
+# (Administrator, Guest, DefaultAccount, WDAGUtilityAccount) are below that.
+if (-not $User) {
+    $normal = @(Get-LocalUser -ErrorAction SilentlyContinue | Where-Object {
+        $_.Enabled -and $_.SID.Value -match '-(\d+)$' -and [int]$Matches[1] -ge 1000 })
+    $User = if ($normal.Count -eq 1) { $normal[0].Name } else { 'user' }
+}
+Write-Step "account: $User"
 
 # ==============================================================================
 #  phase 1: windows activation
@@ -267,6 +306,7 @@ if (-not $SkipUpdates) {
             Write-Host ''
             Write-Host '>>> rebooting in 30s (Ctrl-C to cancel) ...' -ForegroundColor Yellow
             Start-Sleep -Seconds 30
+            Save-Log
             Restart-Computer -Force
             exit
         }
@@ -498,16 +538,28 @@ if (-not $SkipSsh) {
     if ($key -notmatch '^(ssh|ecdsa)-') {
         Write-Fail "public key does not look like a key: '$key'"
     } else {
-        # per-user file
-        $userSsh = Join-Path $env:USERPROFILE '.ssh'
-        $userAk  = Join-Path $userSsh 'authorized_keys'
-        New-Item -ItemType Directory -Force -Path $userSsh | Out-Null
-        $have = (Test-Path $userAk) -and ((Get-Content $userAk -Raw) -match [regex]::Escape($key))
-        if ($have) {
-            Write-Skip "key already in $userAk"
+        if (-not (Get-LocalUser -Name $User -ErrorAction SilentlyContinue)) {
+            Add-Note "there is no local account '$User' on this Windows. Was it installed with another name? Log in as that account; the key below still works for any administrator"
+        }
+
+        # per-user file, in the profile of the account the install made. That profile does not
+        # exist until the account has logged in once, and the first run is as SYSTEM, before
+        # that. Then only the administrators file below gets the key, which is enough for an
+        # administrator account (and the install makes the account one).
+        $userHome = Join-Path "$env:SystemDrive\Users" $User
+        if (Test-Path -LiteralPath $userHome) {
+            $userSsh = Join-Path $userHome '.ssh'
+            $userAk  = Join-Path $userSsh 'authorized_keys'
+            New-Item -ItemType Directory -Force -Path $userSsh | Out-Null
+            $have = (Test-Path $userAk) -and ((Get-Content $userAk -Raw) -match [regex]::Escape($key))
+            if ($have) {
+                Write-Skip "key already in $userAk"
+            } else {
+                Add-Content -Path $userAk -Value $key -Encoding ascii
+                Write-Ok "key -> $userAk"
+            }
         } else {
-            Add-Content -Path $userAk -Value $key -Encoding ascii
-            Write-Ok "key -> $userAk"
+            Write-Skip "no profile for '$User' yet ($userHome), so only the administrators file gets the key"
         }
 
         # administrators file: sshd ignores the per-user file for admin accounts
@@ -527,14 +579,14 @@ if (-not $SkipSsh) {
         if ($LASTEXITCODE -eq 0) { Write-Ok 'ACL set' }
         else { Write-Fail 'icacls on administrators_authorized_keys' }
 
-        Add-Note "authorized key installed for $env:USERNAME (and administrators)"
+        Add-Note "authorized key installed for $User (and administrators)"
     }
 
     Write-Step 'restarting sshd'
     try { Restart-Service sshd -Force; Write-Ok 'sshd restarted' }
     catch { Write-Fail "restart sshd: $($_.Exception.Message)" }
 
-    Add-Note 'ssh reaches the VM only if the container publishes it: add `-p 127.0.0.1:2222:22` to launch-windows.sh'
+    Add-Note "ssh from the host (the launcher publishes port 2222): ssh -p 2222 $User@127.0.0.1"
 }
 
 # ==============================================================================
@@ -664,4 +716,7 @@ if ($script:Failures.Count -eq 0) {
 
 Write-Host ''
 Write-Host '    sign out and back in (or reboot) to pick up PATH and browser defaults.' -ForegroundColor Yellow
+Write-Host "    log: $script:LogFile (copied to the shared folder as setup-dev.log when it can be)" -ForegroundColor Gray
 Write-Host ''
+
+Save-Log

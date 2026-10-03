@@ -33,7 +33,12 @@
 #
 # These can be set in the environment, for one VM at a time:
 #   RAM_SIZE  CPU_CORES  DISK_SIZE  VERSION  WEB_PORT  SSH_PORT
-#   VNC_PORT (macos15)  RDP_PORT (win11)  DISK_FMT (macos15: raw or qcow2)
+#   VNC_PORT (macos15)  RDP_PORT (win11)  DISK_FMT (raw or qcow2)
+#   WIN_USERNAME (win11, default: user)  WIN_PASSWORD (win11, default: the image's "admin")
+#
+# The Windows account is made when Windows is installed. Changing it here does nothing for
+# a Windows that is already installed. A WIN_PASSWORD is written into the unit file, which
+# is then readable only by you.
 
 set -e
 
@@ -99,7 +104,7 @@ VMS=("${UNIQUE[@]}")
 
 # a setting in the environment is for one VM: macos15 and win11 do not share defaults
 if [ "${#VMS[@]}" -gt 1 ]; then
-    for v in RAM_SIZE CPU_CORES DISK_SIZE VERSION WEB_PORT SSH_PORT VNC_PORT RDP_PORT DISK_FMT; do
+    for v in RAM_SIZE CPU_CORES DISK_SIZE VERSION WEB_PORT SSH_PORT VNC_PORT RDP_PORT DISK_FMT WIN_USERNAME WIN_PASSWORD; do
         [ -z "${!v:-}" ] || die "$v is set, and more than one VM is named. Install them one at a time to change a setting."
     done
 fi
@@ -107,8 +112,23 @@ fi
 # ----[ the VMs ]---------------------------------------------------------------
 
 # load_vm <vm>: sets the unit name, the folder and the settings for it
+# quadlet_env <name> <value>: an Environment= line. Two layers read the value:
+#   - Quadlet reads it the way systemd does, so a value with a space is quoted, and a
+#     backslash or a double quote in it is escaped;
+#   - then Quadlet copies it into ExecStart, where systemd expands "%x" as a specifier and
+#     "$x" as an environment variable. Quadlet does not escape those, so % and $ are
+#     doubled here, and systemd turns %% and $$ back into one character.
+# Without the doubling, a password such as 'pa$$word' or '100%' would change when the
+# service starts.
+quadlet_env() {
+    local value
+    value="$(printf '%s' "$2" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/%/%%/g' -e 's/\$/$$/g')"
+    printf 'Environment="%s=%s"\n' "$1" "$value"
+}
+
 load_vm() {
     V_EXTRA_ENV=""
+    V_HAS_SECRET=0
     case "$1" in
         macos15)
             UNIT=macos15
@@ -124,7 +144,7 @@ load_vm() {
             V_SSH_PORT="${SSH_PORT:-2223}"
             V_RDP_PORT=""
             if [ -n "${DISK_FMT:-}" ]; then
-                V_EXTRA_ENV="Environment=DISK_FMT=$DISK_FMT"
+                V_EXTRA_ENV="$(quadlet_env DISK_FMT "$DISK_FMT")"
             fi
             ;;
         win11)
@@ -139,6 +159,18 @@ load_vm() {
             V_RDP_PORT="${RDP_PORT:-3389}"
             V_SSH_PORT="${SSH_PORT:-2222}"
             V_VNC_PORT=""
+            # the account that the Windows install creates
+            V_EXTRA_ENV="$(quadlet_env USERNAME "${WIN_USERNAME:-user}")"
+            if [ -n "${WIN_PASSWORD:-}" ]; then
+                case "$WIN_PASSWORD" in
+                    *$'\n'*) die "WIN_PASSWORD cannot contain a new line" ;;
+                esac
+                V_EXTRA_ENV="$V_EXTRA_ENV"$'\n'"$(quadlet_env PASSWORD "$WIN_PASSWORD")"
+                V_HAS_SECRET=1
+            fi
+            if [ -n "${DISK_FMT:-}" ]; then
+                V_EXTRA_ENV="$V_EXTRA_ENV"$'\n'"$(quadlet_env DISK_FMT "$DISK_FMT")"
+            fi
             ;;
     esac
 }
@@ -162,8 +194,9 @@ render() {
         -e "s|@VNC_PORT@|$(sed_escape "$V_VNC_PORT")|g" \
         -e "s|@RDP_PORT@|$(sed_escape "$V_RDP_PORT")|g" \
         -e "s|@SSH_PORT@|$(sed_escape "$V_SSH_PORT")|g" \
-        -e "s|^@EXTRA_ENV@\$|$(sed_escape "$V_EXTRA_ENV")|" \
-        "$template" | { if [ -z "$V_EXTRA_ENV" ]; then sed -e '/^$/N;/^\n$/D'; else cat; fi; }
+        "$template" | EXTRA="$V_EXTRA_ENV" awk '
+            $0 == "@EXTRA_ENV@" { if (ENVIRON["EXTRA"] != "") print ENVIRON["EXTRA"]; next }
+            { print }'
 }
 
 # ----[ checks ]----------------------------------------------------------------
@@ -285,6 +318,7 @@ install_vm() {
         local changed=0
         [ -f "$target" ] && changed=1
         cp "$tmp/$UNIT.container" "$target"
+        if [ "$V_HAS_SECRET" = 1 ]; then chmod 600 "$target"; fi
         ok "wrote $target"
         if [ "$changed" = 1 ] && systemctl --user is-active --quiet "$UNIT.service" 2>/dev/null; then
             echo "    The service is running with the old settings. Restart it to use the new ones:"

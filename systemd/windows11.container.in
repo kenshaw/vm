@@ -4,7 +4,9 @@
 # ~/.config/containers/systemd/windows11.container. Do not edit that copy: change this file,
 # or the environment you run install.sh with, and run install.sh again.
 #
-# The settings are the same as in ../win11/launch-windows.sh.
+# The settings are the same as in ../win11/launch-windows.sh. USERNAME (and PASSWORD, when
+# you set one) name the Windows account. It is made when Windows is installed, so changing
+# it later does nothing until Windows is installed again.
 
 [Unit]
 Description=Windows 11 VM (dockurr/windows)
@@ -23,6 +25,7 @@ Environment=VERSION=@VERSION@
 Environment=DISK_SIZE=@DISK_SIZE@
 Environment=RAM_SIZE=@RAM_SIZE@
 Environment=CPU_CORES=@CPU_CORES@
+@EXTRA_ENV@
 
 # hardware acceleration, and a network device for the VM
 AddDevice=/dev/kvm
