@@ -22,13 +22,13 @@
 #      Homebrew, or with MacPorts on an Intel Mac (see PACKAGES below). It makes
 #      the bash it installs your login shell, in place of zsh, and writes a
 #      plain ~/.bash_profile and ~/.bashrc for it (see "bash config" below).
-#   7. installs the casks (ghostty, chrome, firefox, desktoppr), then clears the
-#      download quarantine flag from the Firefox, Chrome and Ghostty apps so they
-#      open without the "are you sure" prompt
+#   7. installs the casks (ghostty, iterm2, chrome, firefox, desktoppr), then clears
+#      the download quarantine flag from the Firefox, Chrome, Ghostty and iTerm apps
+#      so they open without the "are you sure" prompt
 #   8. sets the default wallpaper of this macOS release (the aerial ones need
 #      a GPU and show as a white screen in a VM)
-#   9. sets up the Dock: System Settings, Firefox, Chrome, Ghostty and the App
-#      Store, plus Applications and Downloads folders shown as a grid
+#   9. sets up the Dock: System Settings, Firefox, Chrome, Ghostty, iTerm and the
+#      App Store, plus Applications and Downloads folders shown as a grid
 #  10. turns on Remote Login (ssh) and authorizes a public key
 #  11. installs Go with go-setup.sh from github.com/kenshaw/shell-config, run as
 #      root with the new bash and the GNU tools (last: it builds Go from source)
@@ -53,7 +53,7 @@
 #                       [--skip-wallpaper] [--skip-dock] [--skip-ssh]
 #                       [--skip-xcode] [--skip-shell] [--skip-bashrc]
 #                       [--skip-go] [--update-go] [--skip-autologin]
-#                       [--skip-keyboard]
+#                       [--skip-keyboard] [--skip-browsers] [--no-reboot]
 #
 # --packages (or PACKAGES in the environment) says how the command line tools are
 # installed:
@@ -77,6 +77,13 @@
 # of the one that runs this script.
 # KEYBOARD_TYPE in the environment is ansi (the default), iso or jis: the keyboard layout
 # that is saved so that the Keyboard Setup Assistant stops asking. See phase 2.
+# When every step succeeded, the VM restarts by itself, 15 seconds after the summary
+# (REBOOT_DELAY in the environment changes that; Ctrl-C cancels it): the key repeat,
+# scroll direction and reduce motion only show after a log out and in, and the restart
+# also tries the automatic login. It does not restart when a step failed, so that you can
+# read the summary. --no-reboot never restarts.
+# --skip-browsers leaves the browsers as they come. Otherwise Firefox becomes the default
+# browser, and the first-run screens of Firefox and Chrome are turned off (see phase 7).
 # KEY_REPEAT and INITIAL_KEY_REPEAT in the environment set how fast a held key repeats
 # (default 2) and how long it waits before it starts (default 15). Each unit is 15 ms,
 # and these are the fastest settings that System Settings offers. macOS starts at 6 and
@@ -143,7 +150,6 @@ FORMULAE=(
     curl
     ed
     gettext
-    libpq
     mtr
     neovim
     bash-completion
@@ -194,7 +200,6 @@ PORTS=(
     curl
     ed
     gettext
-    postgresql18    # libpq
     mtr
     neovim
 
@@ -206,6 +211,11 @@ PORTS=(
 
 CASKS=(
     ghostty
+
+    # Ghostty draws with Metal and does not start in a VM without a GPU. iTerm2 does
+    # not need one (it has a CPU renderer), so it is there for when Ghostty fails
+    iterm2
+
     google-chrome
     firefox
 
@@ -219,6 +229,7 @@ CASK_APPS=(
     "Firefox"
     "Google Chrome"
     "Ghostty"
+    "iTerm"
 )
 
 # ----[ arguments ]-------------------------------------------------------------
@@ -233,6 +244,8 @@ SKIP_BASHRC=0
 SKIP_GO=0
 SKIP_AUTOLOGIN=0
 SKIP_KEYBOARD=0
+SKIP_BROWSERS=0
+NO_REBOOT=0
 UPDATE_GO=0
 SKIP_FORMULAE=0
 SKIP_CASKS=0
@@ -249,6 +262,8 @@ for arg in "$@"; do
         --skip-go)       SKIP_GO=1 ;;
         --skip-autologin) SKIP_AUTOLOGIN=1 ;;
         --skip-keyboard) SKIP_KEYBOARD=1 ;;
+        --skip-browsers) SKIP_BROWSERS=1 ;;
+        --no-reboot)     NO_REBOOT=1 ;;
         --update-go)     UPDATE_GO=1 ;;
         --skip-formulae) SKIP_FORMULAE=1 ;;
         --skip-casks)    SKIP_CASKS=1 ;;
@@ -257,6 +272,188 @@ for arg in "$@"; do
         *) echo "Error: unknown argument '$arg' (try --help)"; exit 1 ;;
     esac
 done
+
+# ----[ browsers ]--------------------------------------------------------------
+
+PLISTBUDDY=/usr/libexec/PlistBuddy
+LSHANDLERS_PLIST="${LSHANDLERS_PLIST:-$HOME/Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist}"
+FIREFOX_DISTRIBUTION="${FIREFOX_DISTRIBUTION:-$APPLICATIONS_DIR/Firefox.app/Contents/Resources/distribution}"
+CHROME_POLICY_PLIST="${CHROME_POLICY_PLIST:-/Library/Managed Preferences/com.google.Chrome.plist}"
+CHROME_DATA_DIR="${CHROME_DATA_DIR:-$HOME/Library/Application Support/Google/Chrome}"
+
+# set_default_browser <bundle id>: writes the handlers of http, https and html files into
+# the LaunchServices plist, which is what System Settings > Desktop & Dock > Default web
+# browser writes. The usual way for a program to do it (LSSetDefaultHandlerForURLScheme)
+# makes macOS ask "Do you want to change your default web browser?", and a script cannot
+# answer that. Writing the plist asks nothing; lsd reads it again once it is restarted.
+# The handlers that http, https, public.html and public.xhtml had are replaced.
+set_default_browser() {
+    local id="$1" P="$LSHANDLERS_PLIST" i count before after scheme ctype kv k v
+    mkdir -p "$(dirname "$P")"
+    before="$(shasum "$P" 2>/dev/null)"
+    "$PLISTBUDDY" -c 'Print :LSHandlers' "$P" >/dev/null 2>&1 || "$PLISTBUDDY" -c 'Add :LSHandlers array' "$P" >/dev/null 2>&1
+    count=0
+    while "$PLISTBUDDY" -c "Print :LSHandlers:$count" "$P" >/dev/null 2>&1; do
+        count=$((count + 1))
+    done
+    i=$((count - 1))
+    while [ "$i" -ge 0 ]; do
+        scheme="$("$PLISTBUDDY" -c "Print :LSHandlers:$i:LSHandlerURLScheme" "$P" 2>/dev/null)"
+        ctype="$("$PLISTBUDDY" -c "Print :LSHandlers:$i:LSHandlerContentType" "$P" 2>/dev/null)"
+        case "$scheme|$ctype" in
+            'http|'*|'https|'*|*'|public.html'|*'|public.xhtml')
+                "$PLISTBUDDY" -c "Delete :LSHandlers:$i" "$P" >/dev/null 2>&1 ;;
+        esac
+        i=$((i - 1))
+    done
+    for kv in LSHandlerURLScheme:http LSHandlerURLScheme:https LSHandlerContentType:public.html LSHandlerContentType:public.xhtml; do
+        k="${kv%%:*}"
+        v="${kv#*:}"
+        "$PLISTBUDDY" \
+            -c "Add :LSHandlers:0 dict" \
+            -c "Add :LSHandlers:0:$k string $v" \
+            -c "Add :LSHandlers:0:LSHandlerRoleAll string $id" \
+            -c "Add :LSHandlers:0:LSHandlerPreferredVersions dict" \
+            -c "Add :LSHandlers:0:LSHandlerPreferredVersions:LSHandlerRoleAll string -" \
+            "$P" >/dev/null 2>&1 || { fail "could not write the default browser to $P"; return 0; }
+    done
+    plutil -lint "$P" >/dev/null 2>&1 || { fail "$P is not a valid plist after the change"; return 0; }
+    after="$(shasum "$P" 2>/dev/null)"
+    if [ "$before" = "$after" ]; then
+        skip "$id is the default browser already"
+        return 0
+    fi
+    # lsd and cfprefsd keep the old handlers until they are restarted
+    killall lsd cfprefsd >/dev/null 2>&1 || true
+    ok "$id is the default browser (macOS asks nothing when a plist is written)"
+}
+
+# write_if_changed <file> <content>: writes a file, with sudo when the folder is not
+# writable, and says whether it changed it (0) or found it as it was (1)
+write_if_changed() {
+    local file="$1" content="$2" dir tmp
+    if [ -f "$file" ] && [ "$(cat "$file" 2>/dev/null)" = "$content" ]; then
+        return 1
+    fi
+    dir="$(dirname "$file")"
+    tmp="$(mktemp)"
+    printf '%s\n' "$content" > "$tmp"
+    if mkdir -p "$dir" 2>/dev/null && cp "$tmp" "$file" 2>/dev/null; then
+        :
+    else
+        sudo mkdir -p "$dir" && sudo cp "$tmp" "$file" && sudo chmod 644 "$file" || { rm -f "$tmp"; fail "could not write $file"; return 2; }
+    fi
+    rm -f "$tmp"
+    return 0
+}
+
+# set_firefox_policies: distribution/policies.json in the app is how an organization sets
+# up Firefox, and it is read at every start. It turns off the welcome page and the
+# onboarding, the "what's new" page after an update, the "make Firefox the default?" bar
+# and the telemetry notice. Firefox says "managed by your organization" in its menu, and
+# that is the price. An update of Firefox can replace the app: run this script again.
+set_firefox_policies() {
+    local f="$FIREFOX_DISTRIBUTION/policies.json" rc=0
+    step 'Firefox: no welcome pages or prompts'
+    if [ ! -d "$APPLICATIONS_DIR/Firefox.app" ] && [ -z "${FIREFOX_DISTRIBUTION_FORCE:-}" ]; then
+        skip 'Firefox is not installed'
+        return 0
+    fi
+    write_if_changed "$f" '{
+  "policies": {
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "DontCheckDefaultBrowser": true,
+    "DisableTelemetry": true,
+    "UserMessaging": {
+      "SkipOnboarding": true,
+      "WhatsNew": false,
+      "ExtensionRecommendations": false,
+      "FeatureRecommendations": false,
+      "UrlbarInterventions": false,
+      "MoreFromMozilla": false
+    }
+  }
+}' || rc=$?
+    case "$rc" in
+        0) ok "wrote $f" ;;
+        1) skip "$f is as it should be" ;;
+    esac
+}
+
+# set_chrome_policies: Chrome skips its welcome screen when a "First Run" file is in its
+# data folder, and reads managed preferences from /Library/Managed Preferences (a system
+# folder, so this needs sudo). The policies stop the "make Chrome your default browser"
+# bar, the usage statistics question, the sign-in prompt and the promotional tabs.
+# Chrome says "managed by your organization" in its menu, and that is the price. Chrome
+# may ignore some policies on a Mac that no MDM manages; these are not among the sensitive
+# ones. If a prompt still comes up, it has to be answered once, by hand.
+set_chrome_policies() {
+    local P="$CHROME_POLICY_PLIST" i key kind val line first="$CHROME_DATA_DIR/First Run"
+    step 'Chrome: no welcome screen or prompts'
+    CHROME_CHANGED=0
+    if [ ! -d "$APPLICATIONS_DIR/Google Chrome.app" ] && [ -z "${CHROME_FORCE:-}" ]; then
+        skip 'Chrome is not installed'
+        return 0
+    fi
+    if [ -e "$first" ]; then
+        skip 'the First Run file exists already'
+    elif mkdir -p "$CHROME_DATA_DIR" && : > "$first"; then
+        ok "wrote $first"
+    else
+        fail "could not write $first"
+    fi
+
+    for line in 'DefaultBrowserSettingEnabled bool false' 'MetricsReportingEnabled bool false' \
+                'BrowserSignin integer 0' 'PromotionalTabsEnabled bool false'; do
+        key="${line%% *}"; line="${line#* }"; kind="${line%% *}"; val="${line#* }"
+        if [ "$(sudo "$PLISTBUDDY" -c "Print :$key" "$P" 2>/dev/null)" = "$val" ]; then
+            continue
+        fi
+        sudo mkdir -p "$(dirname "$P")"
+        if sudo "$PLISTBUDDY" -c "Set :$key $val" "$P" >/dev/null 2>&1 \
+            || sudo "$PLISTBUDDY" -c "Add :$key $kind $val" "$P" >/dev/null 2>&1; then
+            CHROME_CHANGED=1
+        else
+            fail "could not set the Chrome policy $key"
+        fi
+    done
+    sudo chown root:wheel "$P" 2>/dev/null || true
+    sudo chmod 644 "$P" 2>/dev/null || true
+    if [ "${CHROME_CHANGED:-0}" = 1 ]; then
+        killall cfprefsd >/dev/null 2>&1 || true
+        ok "wrote the Chrome policies to $P"
+    else
+        skip "the Chrome policies in $P are as they should be"
+    fi
+}
+
+# ----[ restart ]---------------------------------------------------------------
+
+# reboot_now: counts down, so that Ctrl-C can cancel it, then restarts. It runs after
+# the log is complete. REBOOT_COMMAND (in the environment) replaces the restart
+# command, for tests.
+reboot_now() {
+    local n="${REBOOT_DELAY:-15}"
+    case "$n" in ''|*[!0-9]*) n=15 ;; esac
+    trap 'printf "\n    restart cancelled. Restart when you like: sudo shutdown -r now\n"; exit 0' INT
+    printf '\n    Everything succeeded. Restarting the VM in %s seconds, so that the settings take effect.\n' "$n"
+    printf '    Press Ctrl-C to cancel.\n'
+    while [ "$n" -gt 0 ]; do
+        printf '\r    restarting in %2d ' "$n"
+        sleep 1
+        n=$((n - 1))
+    done
+    printf '\r    restarting now      \n'
+    sync
+    if [ -n "${REBOOT_COMMAND:-}" ]; then
+        # shellcheck disable=SC2086
+        $REBOOT_COMMAND
+    else
+        sudo shutdown -r now
+    fi
+    trap - INT
+}
 
 # ----[ log ]-------------------------------------------------------------------
 
@@ -278,7 +475,11 @@ if [ -z "$SETUP_MACOS_LOGGING" ]; then
         printf '===== setup-macos.sh finished %s, exit status %s =====\n' "$(date '+%F %T')" "$SETUP_RC"
         exit "$SETUP_RC"
     } | tee -a "${SETUP_LOGS[@]}"
-    exit "${PIPESTATUS[0]}"
+    SETUP_RC="${PIPESTATUS[0]}"
+    if [ "$SETUP_RC" = 0 ] && [ "$NO_REBOOT" = 0 ]; then
+        reboot_now
+    fi
+    exit "$SETUP_RC"
 fi
 
 # ----[ output helpers ]--------------------------------------------------------
@@ -367,9 +568,11 @@ KEYBOARD_TYPE="${KEYBOARD_TYPE:-ansi}"
 # Keyboard Setup Assistant saves its answer under that name, and a QEMU keyboard does
 # not say which layout it has, so macOS asks again whenever the answer is missing.
 # A keyboard is a HID device with usage page 1 and usage 6. The ids are in decimal.
+# Product id 65535 is the placeholder of a virtual keyboard that macOS makes itself
+# (Apple vendor 1452); it is never asked about, so it is left out.
 keyboard_ids() {
     ioreg -r -c IOHIDDevice -l -w0 2>/dev/null | awk '
-        function flush() { if (page == 1 && usage == 6 && vendor != "" && product != "") print vendor "-" product "-" (country == "" ? 0 : country) }
+        function flush() { if (page == 1 && usage == 6 && vendor != "" && product != "" && product != 65535) print vendor "-" product "-" (country == "" ? 0 : country) }
         /\+-o / { flush(); vendor = product = country = page = usage = "" }
         /"VendorID" = /        { vendor = $NF }
         /"ProductID" = /       { product = $NF }
@@ -516,8 +719,11 @@ if [ "$SKIP_TUNING" = 0 ]; then
     # ---- no GPU: cut everything the window server has to composite ----
     step 'animations, transparency, motion and scroll direction'
     # the window and Dock animation keys from notes/macos/osx-disable-animations.sh
-    # still work on macOS 15. reduceMotion and reduceTransparency work too, but
-    # only show after you log out and in. Mail has no account in this VM, so its
+    # still work on macOS 15. com.apple.universalaccess (reduceMotion and
+    # reduceTransparency) does not: macOS 15 refuses a write to it from a script
+    # unless Terminal has Full Disk Access ("Could not write domain"), so those two
+    # are left for System Settings, and the summary says so. ReduceMotionEnabled in
+    # com.apple.Accessibility is accepted and stays below. Mail has no account in this VM, so its
     # animation keys are gone.
     #
     # com.apple.swipescrolldirection false turns off Natural scrolling, so the
@@ -547,15 +753,19 @@ com.apple.dock|launchanim|bool|false
 com.apple.dock|no-bouncing|bool|true
 com.apple.dock|mineffect|string|scale
 com.apple.dock|show-recents|bool|false
-com.apple.universalaccess|reduceMotion|bool|true
-com.apple.universalaccess|reduceTransparency|bool|true
 com.apple.Accessibility|ReduceMotionEnabled|int|1
 EOF
 
     # ---- background work that burns the VM's CPU and disk ----
     step 'Spotlight and Time Machine'
     tune 'Spotlight indexing' sudo mdutil -a -i off
-    tune 'Time Machine' sudo tmutil disable
+    # tmutil disable needs Full Disk Access on macOS 15, and there is nothing to
+    # disable when no backup disk is set up, which is always so in a new VM
+    if tmutil destinationinfo 2>&1 | grep -q 'No destinations configured'; then
+        skip 'Time Machine has no backup disk, so it does nothing'
+    else
+        tune 'Time Machine' sudo tmutil disable
+    fi
     tune 'Time Machine disk offer' defaults write com.apple.TimeMachine DoNotOfferNewDisksForBackup -bool true
 
     # ---- updates ----
@@ -597,9 +807,10 @@ EOF
         printf '%s    %d not applied (macOS refused them, or they do not exist on this release):%s\n' \
             "$C_NOTE" "${#NOT_APPLIED[@]}" "$C_OFF"
         for n in "${NOT_APPLIED[@]}"; do printf '%s      - %s%s\n' "$C_SKIP" "$n" "$C_OFF"; done
-        note 'some settings were refused; reduceMotion and reduceTransparency can be set in System Settings > Accessibility > Display'
+        note 'some settings were refused (listed above); macOS 15 blocks some of them from a script'
     fi
-    note 'log out and in (or reboot) so reduceMotion, reduceTransparency and the scroll direction show'
+    note 'turn on Reduce transparency (and Reduce motion) in System Settings > Accessibility > Display: macOS 15 does not let a script do it'
+    note 'log out and in (or reboot) so the scroll direction, the key repeat and reduce motion show'
     note 'point releases install by themselves and restart the VM; a major upgrade (macOS 26) never does, so do not click Upgrade Now'
 fi
 
@@ -1232,6 +1443,13 @@ install_macports() {
 # needs it fails, instead of starting a build that takes hours.
 SLOW_PORTS_RE='^(llvm|clang|gcc|libgcc|rust|go|ghc|nodejs|python|openjdk|qt|webkit|chromium|boost|ocaml|swift|emacs)'
 
+# MacPorts builds Python with profile-guided optimization and LTO, which takes most of an
+# hour. Without those two variants it builds in a few minutes and runs a little slower.
+# Python is the one slow port that this script does build, because glib2, and with it
+# wget, needs it, and macOS 15 on Intel has no ready-made binary of python313 or python314.
+PYTHON_PORT_RE='^python3[0-9]+$'
+PYTHON_PORT_VARIANTS='-lto -optimizations'
+
 # install_port <port>: binary-only (-b), so a port with no ready-made binary fails at
 # once. Without it, the port would compile from source for hours.
 #
@@ -1260,6 +1478,17 @@ install_port() {
         if [ -z "$dep" ]; then
             fail "port $p (see the messages above)"
             break
+        fi
+        if printf '%s' "$dep" | grep -Eq "$PYTHON_PORT_RE"; then
+            step "no ready-made binary of $dep for this macOS: building it from source without LTO and PGO (a few minutes), then trying $p again"
+            # shellcheck disable=SC2086
+            sudo "$PORT" -N install "$dep" $PYTHON_PORT_VARIANTS 2>&1 | dim
+            if [ -z "$("$PORT" -q installed "$dep" 2>/dev/null)" ]; then
+                fail "port $dep (needed by $p) did not build"
+                break
+            fi
+            [ "$tries" -gt 5 ] && { fail "port $p: still missing a ready-made binary after building $((tries - 1)) dependencies"; break; }
+            continue
         fi
         if printf '%s' "$dep" | grep -Eq "$SLOW_PORTS_RE"; then
             fail "port $p: the ready-made binary of $dep is missing, and $dep is too slow to build here"
@@ -1358,6 +1587,18 @@ if [ "$SKIP_CASKS" = 0 ]; then
             ok "$name opens without a prompt"
         fi
     done
+
+    # ---- Firefox is the default browser, and nothing asks about a first run ----
+    if [ "$SKIP_BROWSERS" = 0 ]; then
+        step 'default browser: Firefox'
+        if [ -d "$APPLICATIONS_DIR/Firefox.app" ]; then
+            set_default_browser org.mozilla.firefox
+        else
+            skip 'Firefox is not installed'
+        fi
+        set_firefox_policies
+        set_chrome_policies
+    fi
 fi
 
 # ==============================================================================
@@ -1507,6 +1748,7 @@ if [ "$SKIP_DOCK" = 0 ]; then
         "$APPLICATIONS_DIR/Firefox.app" \
         "$APPLICATIONS_DIR/Google Chrome.app" \
         "$APPLICATIONS_DIR/Ghostty.app" \
+        "$APPLICATIONS_DIR/iTerm.app" \
         "$SYSTEM_APPLICATIONS_DIR/App Store.app"; do
         if [ -d "$app" ]; then
             DOCK_APPS+=("$(dock_app_tile "$app")")

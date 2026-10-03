@@ -153,9 +153,9 @@ To put a copy in the shared folder, run `sudo cp ~/setup-macos.log /Volumes/shar
 | 4 | **Xcode**, from the `.xip` in the shared folder (below) |
 | 5 | **Homebrew**: the official installer on Apple silicon, set up by hand on Intel (below) |
 | 6 | **command line tools**: the list from `notes/macos.md`, plus what the darwin part of `.bashrc` expects, plus git, gh, jq, node, python and rustup. With Homebrew, or with MacPorts on Intel (below). Then it makes the bash it installed your **login shell** and writes a plain **`~/.bashrc`** for it (below) |
-| 7 | casks: ghostty, google-chrome, firefox and desktoppr. Then it clears the quarantine flag on Firefox, Chrome and Ghostty |
+| 7 | casks: ghostty, iterm2, google-chrome, firefox and desktoppr. Then it clears the quarantine flag on the apps, makes **Firefox the default browser** and turns off the **first-run screens** of Firefox and Chrome (below) |
 | 8 | **default wallpaper** (below) |
-| 9 | **Dock**: System Settings, Firefox, Chrome, Ghostty and the App Store, plus Applications and Downloads folders shown as a grid |
+| 9 | **Dock**: System Settings, Firefox, Chrome, Ghostty, iTerm and the App Store, plus Applications and Downloads folders shown as a grid |
 | 10 | Remote Login (ssh) on, and the `id_ed25519` key authorized |
 | 11 | **Go**, from `go-setup.sh` in `kenshaw/shell-config`, run last (below) |
 
@@ -166,7 +166,14 @@ To put a copy in the shared folder, run `sudo cp ~/setup-macos.log /Volumes/shar
 --skip-tuning  --skip-formulae  --skip-casks  --skip-wallpaper
 --skip-dock    --skip-ssh       --skip-xcode    --skip-shell    --skip-bashrc
 --skip-go      --update-go     --skip-autologin   --skip-keyboard
+--skip-browsers  --no-reboot
 ```
+
+When **every step succeeded**, the VM **restarts by itself** 15 seconds after the summary, so that
+the key repeat, the scroll direction and the other log-out-and-in settings take effect, and so that
+automatic login is tried. Ctrl-C in those 15 seconds cancels it. It does not restart when a step
+failed, so you can read the summary. `--no-reboot` never restarts, and `REBOOT_DELAY=<seconds>`
+changes the wait.
 
 `--update-go` runs `go-setup.sh` again when Go is already installed. Without it, an existing
 Go is left alone.
@@ -304,7 +311,7 @@ override it with `--packages=` (or `PACKAGES`).
   Silicon processors!". The installer has no switch to allow one. I read the whole
   script: its only options are `--path` and `--help`.
 - It no longer builds bottles (ready-made binaries) for Intel. For macOS 15, 40 of
-  the 43 formulae in this script's list have no Intel bottle, so they compile from
+  the 42 formulae in this script's list have no Intel bottle, so they compile from
   source with all their dependencies. `neovim` alone builds 29 dependencies, including
   cmake and python. In an 8 CPU VM that takes hours.
 - `brew` itself still runs on Intel until **2027-09-01**, and casks still work. I
@@ -332,15 +339,27 @@ for the Homebrew copy).
 script was first run, `openssl3` and `bzip2` had no macOS 15 Intel binary at all, and
 `tree-sitter` had only an older one than the ports tree wanted. Every port that needs one
 of them fails in binary-only mode with `Failed to archivefetch <name>`. That took down 7
-of the 43 ports (`bat`, `grep`, `wget`, `postgresql18`, `neovim`, `python313`, `rustup`),
+of the ports (`bat`, `grep`, `wget`, `neovim`, `python313`, `rustup`, and the PostgreSQL one that has since been removed),
 even though each of them has its own binary. So the script now heals this: when a port
 fails for that reason, it builds **only that one dependency** from source, and tries the
 port again. These three build in a few minutes. A dependency that matches the slow list
-(compilers, Rust, Go, Node, Python, Java, Qt, and the like) is not built: the port fails
+(compilers, Rust, Go, Node, Java, Qt, and the like) is not built: the port fails
 with a message that names it.
 
-**Casks that depend on a formula build it from source on Intel.** The four casks in this
-script (Ghostty, Chrome, Firefox, desktoppr) are plain downloads. `gcloud-cli` was removed for
+**Python is the exception.** `wget` needs `glib2`, which needs `python314`, and the explicit
+`python313` is on the list too. MacPorts has no ready-made binary of either for macOS 15 Intel
+(the first run failed on both). A build with the default `+lto +optimizations` variants takes most
+of an hour, so the script builds them with `-lto -optimizations`, which takes a few minutes and runs
+a little slower. The build is only tried when the binary is missing.
+
+**Some settings cannot be written from a script.** macOS 15 refuses a write to
+`com.apple.universalaccess` (Reduce motion, Reduce transparency) unless Terminal has Full Disk
+Access, so the script no longer tries, and the summary tells you to switch them on in System
+Settings > Accessibility > Display. `tmutil disable` also needs Full Disk Access; a new VM has no
+backup disk, so the script skips it when `tmutil destinationinfo` says "No destinations configured".
+
+**Casks that depend on a formula build it from source on Intel.** The casks in this
+script (Ghostty, iTerm2, Chrome, Firefox, desktoppr) are plain downloads. `gcloud-cli` was removed for
 this reason: its cask depends on the `python@3.14` formula, and with no bottles Homebrew
 compiled Python and everything it needs (`openssl@3`, `sqlite`, `readline`, `xz`, `zstd`,
 `lz4`, `cmake`, `pkgconf`) from source, which took tens of minutes. Check a cask with
@@ -443,6 +462,35 @@ out and in. macOS refuses some settings. The script lists them at the end. For
 Reduce Motion and Reduce Transparency, set them in **System Settings >
 Accessibility > Display**.
 
+### Terminals: Ghostty and iTerm2
+
+**Ghostty needs a GPU and does not start in this VM.** It draws with Metal on macOS and has no
+software renderer or setting to turn the GPU off (the Ghostty project has discussed a CPU renderer
+but has none). So the script also installs **iTerm2**, which works without a GPU, and pins it in the
+Dock next to Ghostty. Ghostty stays installed for a Mac or a Tart VM that has a GPU.
+
+### Browsers: default browser and first run
+
+- **Firefox is the default browser.** The script writes the handlers for `http`, `https` and HTML
+  files into `~/Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist`
+  and restarts `lsd`. This is what System Settings writes, and macOS asks nothing. The usual way for
+  a program to do it, `LSSetDefaultHandlerForURLScheme`, makes macOS ask "Do you want to change your
+  default web browser?", which a script cannot answer. Checked on this VM: after the change,
+  LaunchServices reports `org.mozilla.firefox` for `http` and `https`.
+- **Firefox's welcome page and prompts** are off through `Firefox.app/Contents/Resources/distribution/
+  policies.json`: no first-run page, no onboarding, no "what's new" page, no "make Firefox the
+  default" bar and no telemetry notice. Firefox then says "managed by your organization" in its
+  menu. An update that replaces the app removes the file: run the script again.
+- **Chrome's welcome screen** is off by a `First Run` file in
+  `~/Library/Application Support/Google/Chrome/`, and its prompts by policies in
+  `/Library/Managed Preferences/com.google.Chrome.plist` (no default-browser bar, no usage-statistics
+  question, no sign-in prompt, no promotional tabs). Chrome says "managed by your organization" too.
+- **Not tested in a real Chrome start:** the files are written and read back, but nobody has opened
+  Chrome and Firefox in a restored VM to see that no screen comes up. Chrome may ignore some policies
+  on a Mac that no MDM manages. **Not covered:** the macOS keychain question ("Chrome wants to use
+  your confidential information stored in Chrome Safe Storage"), which has to be answered once.
+- `--skip-browsers` leaves all of this out.
+
 ### Key repeat
 
 macOS starts with `KeyRepeat` 6 and `InitialKeyRepeat` 25, in units of 15 ms: 90 ms between
@@ -541,7 +589,7 @@ If the link is missing, the script says so, and you set a wallpaper by hand in
 
 Homebrew downloads each cask, so macOS marks the app as quarantined. The first
 launch then asks "are you sure you want to open it". The script clears that flag on
-Firefox, Chrome and Ghostty with `xattr -dr com.apple.quarantine`, and checks that
+Firefox, Chrome, Ghostty and iTerm with `xattr -dr com.apple.quarantine`, and checks that
 it is gone. It only touches those three apps. It does not turn Gatekeeper off.
 
 Homebrew no longer has `--no-quarantine`, and it dropped the `HOMEBREW_CASK_OPTS`
