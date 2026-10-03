@@ -176,6 +176,7 @@ Go is left alone.
 | variable | effect |
 |---|---|
 | `PACKAGES` | the same as `--packages` |
+| `KEY_REPEAT`, `INITIAL_KEY_REPEAT` | how often a held key repeats (default 2) and how long it waits first (default 15), in units of 15 ms |
 | `KEYBOARD_TYPE` | `ansi` (the default), `iso` or `jis`: the keyboard layout to save (see Keyboard layout) |
 | `AUTOLOGIN_USER` | the account that logs in by itself, in place of the one that runs the script |
 | `DEFAULT_SHELL` | the bash to make the login shell, in place of the one Homebrew or MacPorts installed |
@@ -427,6 +428,9 @@ It runs second, so the VM does not sleep or lock during the long installs.
 - **Natural scrolling** is off, so the mouse wheel scrolls the usual way. It is one
   setting for the mouse and the trackpad.
 - **Spotlight indexing and Time Machine** are off. They use CPU and disk for nothing.
+- **Keys repeat fast.** macOS repeats a held key every 90 ms after 375 ms, which is slow, most of
+  all through the web viewer. The script sets 30 ms after 225 ms (the fastest that System Settings
+  offers) and turns off the accent menu on a held key. See below.
 - **The keyboard layout is saved**, so the Keyboard Setup Assistant stops asking at every start.
   See below.
 - **Automatic login** is on: the VM goes straight to the desktop of the account that ran the
@@ -438,6 +442,18 @@ Reduce Motion, Reduce Transparency and the scroll direction show only after you 
 out and in. macOS refuses some settings. The script lists them at the end. For
 Reduce Motion and Reduce Transparency, set them in **System Settings >
 Accessibility > Display**.
+
+### Key repeat
+
+macOS starts with `KeyRepeat` 6 and `InitialKeyRepeat` 25, in units of 15 ms: 90 ms between
+repeats, after 375 ms. Through noVNC that feels slow. The tuning phase sets 2 and 15 (30 ms after
+225 ms), the end of the sliders in System Settings > Keyboard, and sets `ApplePressAndHoldEnabled`
+to false, so that holding a key repeats it and does not open the accent menu, which gets in the
+way in a terminal and in vim. `KEY_REPEAT=3 INITIAL_KEY_REPEAT=20 ./setup-macos.sh` picks other
+values, and `--skip-keyboard` skips this and the layout. The change shows after the next log out
+and in. noVNC sends a held key once, so the repeating is done by macOS in the VM, and these
+settings are the ones that count. By hand: `defaults write -g KeyRepeat -int 2`, and
+`defaults write -g InitialKeyRepeat -int 15`.
 
 ### Keyboard layout
 

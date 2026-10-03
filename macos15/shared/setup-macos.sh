@@ -77,6 +77,10 @@
 # of the one that runs this script.
 # KEYBOARD_TYPE in the environment is ansi (the default), iso or jis: the keyboard layout
 # that is saved so that the Keyboard Setup Assistant stops asking. See phase 2.
+# KEY_REPEAT and INITIAL_KEY_REPEAT in the environment set how fast a held key repeats
+# (default 2) and how long it waits before it starts (default 15). Each unit is 15 ms,
+# and these are the fastest settings that System Settings offers. macOS starts at 6 and
+# 25. Both belong to --skip-keyboard.
 # DEFAULT_SHELL in the environment names the bash to make the login shell, in place
 # of the one that Homebrew or MacPorts installed.
 # PUBLIC_KEY in the environment replaces the key that is authorized for ssh.
@@ -409,6 +413,25 @@ set_keyboard_type() {
     note "keyboard layout saved as $KEYBOARD_TYPE; if the Keyboard Setup Assistant still comes up after a restart, run it through once (press Z, then /) and tell the maintainers"
 }
 
+KEY_REPEAT="${KEY_REPEAT:-2}"
+INITIAL_KEY_REPEAT="${INITIAL_KEY_REPEAT:-15}"
+
+# set_key_repeat: macOS repeats a held key slowly (6, which is 90 ms, after a wait of 25,
+# which is 375 ms; a unit is 15 ms), which is painful through the web viewer. The guest
+# does the repeating, so these settings are the ones that count. A held key repeats
+# instead of showing the accent menu, which matters in a terminal and in vim. All three
+# show only after a log out and in.
+set_key_repeat() {
+    step 'key repeat'
+    case "$KEY_REPEAT$INITIAL_KEY_REPEAT" in
+        *[!0-9]*|'') fail "KEY_REPEAT and INITIAL_KEY_REPEAT are whole numbers (2 and 15 are the fastest that System Settings offers)"; return 0 ;;
+    esac
+    tune 'key repeat rate' defaults write -g KeyRepeat -int "$KEY_REPEAT"
+    tune 'key repeat delay' defaults write -g InitialKeyRepeat -int "$INITIAL_KEY_REPEAT"
+    tune 'press and hold' defaults write -g ApplePressAndHoldEnabled -bool false
+    ok "a held key repeats every $((KEY_REPEAT * 15)) ms after $((INITIAL_KEY_REPEAT * 15)) ms; this shows after the next log out and in"
+}
+
 KCPASSWORD="${KCPASSWORD:-/etc/kcpassword}"
 AUTOLOGIN_USER="${AUTOLOGIN_USER:-$USER}"
 
@@ -484,6 +507,7 @@ if [ "$SKIP_TUNING" = 0 ]; then
     tune 'login window screen lock (system)' sudo defaults write /Library/Preferences/com.apple.loginwindow DisableScreenLock -bool true
     if [ "$SKIP_KEYBOARD" = 0 ]; then
         set_keyboard_type
+        set_key_repeat
     fi
     if [ "$SKIP_AUTOLOGIN" = 0 ]; then
         set_autologin
