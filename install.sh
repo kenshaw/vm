@@ -261,7 +261,7 @@ adopt_existing_container() {
     fi
     echo "    A container named $UNIT exists (made by the launcher script). It uses the same VM disk"
     echo "    as the service, so only one of them may run."
-    if confirm "    Stop it (a clean shutdown, up to 2 minutes) and remove it? The VM disk is kept."; then
+    if confirm "    Stop it (up to 2 minutes) and remove it? The VM disk is kept."; then
         podman stop --time 120 "$UNIT" >/dev/null 2>&1 || true
         podman rm --force "$UNIT" >/dev/null
         ok "removed the container $UNIT"
@@ -387,7 +387,7 @@ do_install() {
         echo
         echo "  $UNIT.service"
         echo "    start:   systemctl --user start $UNIT.service"
-        echo "    stop:    systemctl --user stop $UNIT.service        (a clean shutdown, up to 2.5 minutes)"
+        echo "    stop:    systemctl --user stop $UNIT.service        (asks the guest to shut down, up to 2.5 minutes)"
         echo "    status:  systemctl --user status $UNIT.service"
         echo "    log:     journalctl --user -u $UNIT.service -f"
     done
@@ -418,7 +418,7 @@ do_uninstall() {
             continue
         fi
         if systemctl --user is-active --quiet "$UNIT.service" 2>/dev/null; then
-            confirm "    $UNIT.service is running. Stop it (a clean shutdown, up to 2.5 minutes)?" || die "left $UNIT.service running."
+            confirm "    $UNIT.service is running. Stop it (up to 2.5 minutes)?" || die "left $UNIT.service running."
             systemctl --user stop "$UNIT.service"
             ok "stopped $UNIT.service"
         fi

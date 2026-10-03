@@ -2,7 +2,7 @@
 
 # snapshot-macos.sh - snapshots of the macOS 15 VM, to start again from a known state
 #
-# usage: snapshot-macos.sh create  <name> [--start]
+# usage: snapshot-macos.sh create  <name> [--wait] [--start]
 #        snapshot-macos.sh restore <name> [--yes] [--start]
 #        snapshot-macos.sh list
 #        snapshot-macos.sh delete  <name> [--yes]

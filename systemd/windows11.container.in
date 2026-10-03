@@ -39,7 +39,7 @@ Volume=@DIR@/windows-data:/storage
 Volume=@DIR@/shared:/shared
 Volume=@DIR@/shared:/oem
 
-# time for Windows to shut down cleanly when the service stops
+# time the guest gets to shut down when the service stops; after it, QEMU is killed
 StopTimeout=120
 
 [Service]

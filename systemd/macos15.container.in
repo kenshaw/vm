@@ -35,7 +35,8 @@ GroupAdd=keep-groups
 Volume=@DIR@/macos-data:/storage
 Volume=@DIR@/shared:/shared
 
-# time for macOS to shut down cleanly when the service stops
+# time the guest gets to shut down when the service stops; after it, QEMU is killed
+# (macOS in this setup ignores the request, so it is always killed after this time)
 StopTimeout=120
 
 [Service]

@@ -125,7 +125,7 @@ is set the defaults cannot be changed by hand. To release them, delete the
 
 It works exactly like the macOS one (`../macos15/README.md` explains it, and `../snapshot-vm.sh` is
 the shared tool): a btrfs reflink copy of `windows-data/`, which takes a moment and uses almost no
-space until the VM changes the disk. `create` shuts Windows down cleanly first. If the VM runs as a
+space until the VM changes the disk. `create` asks Windows to shut down first (Windows normally does; `create` says if it had to cut power, and `create --wait` waits for you to shut down from inside). If the VM runs as a
 systemd service, it is stopped and started through the service.
 
 **To test the setup script again and again** you need a Windows that is installed but not set up,

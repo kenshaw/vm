@@ -12,7 +12,8 @@
 #   1. asks for your password once and keeps sudo alive for the whole run
 #   2. turns off what hurts in a VM: sleep, the screen saver, animations,
 #      transparency, Spotlight, Time Machine and more. It sets macOS to
-#      install point releases (15.x) by itself and never a major upgrade.
+#      install point releases (15.x) by itself and never a major upgrade, and
+#      logs in as you by itself at the login window (it asks for your password).
 #   3. installs the Xcode Command Line Tools
 #   4. installs full Xcode from the Xcode_*.xip that you put in the shared
 #      folder. Apple requires a sign in to download Xcode, so that is by hand.
@@ -51,7 +52,7 @@
 #                       [--skip-tuning] [--skip-formulae] [--skip-casks]
 #                       [--skip-wallpaper] [--skip-dock] [--skip-ssh]
 #                       [--skip-xcode] [--skip-shell] [--skip-bashrc]
-#                       [--skip-go] [--update-go]
+#                       [--skip-go] [--update-go] [--skip-autologin]
 #
 # --packages (or PACKAGES in the environment) says how the command line tools are
 # installed:
@@ -71,6 +72,8 @@
 # downloaded from GO_SETUP_URL (default: scripts/go-setup.sh in
 # github.com/kenshaw/shell-config). A go-setup.sh next to this script is used too.
 # --update-go runs it again when Go is already installed; otherwise it is skipped.
+# AUTOLOGIN_USER in the environment names the account that logs in by itself, in place
+# of the one that runs this script.
 # DEFAULT_SHELL in the environment names the bash to make the login shell, in place
 # of the one that Homebrew or MacPorts installed.
 # PUBLIC_KEY in the environment replaces the key that is authorized for ssh.
@@ -221,6 +224,7 @@ SKIP_XCODE=0
 SKIP_SHELL=0
 SKIP_BASHRC=0
 SKIP_GO=0
+SKIP_AUTOLOGIN=0
 UPDATE_GO=0
 SKIP_FORMULAE=0
 SKIP_CASKS=0
@@ -235,6 +239,7 @@ for arg in "$@"; do
         --skip-shell)    SKIP_SHELL=1 ;;
         --skip-bashrc)   SKIP_BASHRC=1 ;;
         --skip-go)       SKIP_GO=1 ;;
+        --skip-autologin) SKIP_AUTOLOGIN=1 ;;
         --update-go)     UPDATE_GO=1 ;;
         --skip-formulae) SKIP_FORMULAE=1 ;;
         --skip-casks)    SKIP_CASKS=1 ;;
@@ -344,6 +349,48 @@ trap 'kill "$SUDO_KEEPALIVE" 2>/dev/null' EXIT
 #  runs before the long installs, so the VM does not sleep or lock half way
 # ==============================================================================
 
+# ----[ automatic login ]-------------------------------------------------------
+
+KCPASSWORD="${KCPASSWORD:-/etc/kcpassword}"
+AUTOLOGIN_USER="${AUTOLOGIN_USER:-$USER}"
+
+autologin_user_now() {
+    defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser 2>/dev/null
+}
+
+# set_autologin: to log in by itself, macOS keeps the password of the account (lightly
+# obfuscated, in /etc/kcpassword), so it has to be told the password. `sysadminctl
+# -autologin set ... -password -` asks for it itself, at the terminal. This script never
+# sees it, never writes it to the log, and never puts it on a command line.
+set_autologin() {
+    local u="$AUTOLOGIN_USER"
+    step "automatic login as $u"
+
+    if [ "$(autologin_user_now)" = "$u" ] && sudo test -f "$KCPASSWORD"; then
+        skip "automatic login is already set up for $u"
+        return 0
+    fi
+    # with FileVault on, the disk is locked until the password is typed, so macOS cannot
+    if fdesetup status 2>/dev/null | grep -q 'FileVault is On'; then
+        skip "FileVault is on, and macOS does not log in by itself then"
+        return 0
+    fi
+    if [ ! -t 0 ]; then
+        skip "there is no terminal to type the password in. Later, run: sudo sysadminctl -autologin set -userName $u -password -"
+        return 0
+    fi
+
+    echo "    macOS needs the password of $u for this. It asks below: type it (nothing is shown)."
+    sudo sysadminctl -autologin set -userName "$u" -password -
+
+    if [ "$(autologin_user_now)" = "$u" ] && sudo test -f "$KCPASSWORD"; then
+        ok "$u logs in by itself at the login window"
+        note "automatic login keeps the password of $u, lightly obfuscated, in $KCPASSWORD: anyone who can read the disk can recover it. That is how macOS does it, and it is why it is off by default."
+    else
+        fail "automatic login was not set up (was the password right?). Try again with: sudo sysadminctl -autologin set -userName $u -password -"
+    fi
+}
+
 # tune <label> <command...>: run one setting. A setting that macOS refuses (a
 # SIP-protected domain, say) is listed in the summary, and the run goes on.
 TUNE_OK=0
@@ -377,6 +424,9 @@ if [ "$SKIP_TUNING" = 0 ]; then
     tune 'automatic logout' sudo defaults write /Library/Preferences/.GlobalPreferences com.apple.autologout.AutoLogOutDelay -int 0
     tune 'login window screen lock' defaults write com.apple.loginwindow DisableScreenLock -bool true
     tune 'login window screen lock (system)' sudo defaults write /Library/Preferences/com.apple.loginwindow DisableScreenLock -bool true
+    if [ "$SKIP_AUTOLOGIN" = 0 ]; then
+        set_autologin
+    fi
 
     # ---- no GPU: cut everything the window server has to composite ----
     step 'animations, transparency, motion and scroll direction'

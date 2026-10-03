@@ -148,7 +148,7 @@ To put a copy in the shared folder, run `sudo cp ~/setup-macos.log /Volumes/shar
 | phase | what it does |
 |---|---|
 | 1 | asks for sudo and keeps it alive |
-| 2 | **VM tuning** (below) |
+| 2 | **VM tuning** (below), including automatic login as you |
 | 3 | Xcode Command Line Tools |
 | 4 | **Xcode**, from the `.xip` in the shared folder (below) |
 | 5 | **Homebrew**: the official installer on Apple silicon, set up by hand on Intel (below) |
@@ -165,7 +165,7 @@ To put a copy in the shared folder, run `sudo cp ~/setup-macos.log /Volumes/shar
 --packages=auto|homebrew|hybrid
 --skip-tuning  --skip-formulae  --skip-casks  --skip-wallpaper
 --skip-dock    --skip-ssh       --skip-xcode    --skip-shell    --skip-bashrc
---skip-go      --update-go
+--skip-go      --update-go     --skip-autologin
 ```
 
 `--update-go` runs `go-setup.sh` again when Go is already installed. Without it, an existing
@@ -176,6 +176,7 @@ Go is left alone.
 | variable | effect |
 |---|---|
 | `PACKAGES` | the same as `--packages` |
+| `AUTOLOGIN_USER` | the account that logs in by itself, in place of the one that runs the script |
 | `DEFAULT_SHELL` | the bash to make the login shell, in place of the one Homebrew or MacPorts installed |
 | `GO_SETUP_SCRIPT` | a `go-setup.sh` to run, in place of the downloaded one |
 | `GO_SETUP_URL` | where to download `go-setup.sh` (default: `scripts/go-setup.sh` in `github.com/kenshaw/shell-config`) |
@@ -199,12 +200,23 @@ install takes about two hours; a snapshot takes a moment.
 ```
 
 **When to take it.** After the install is finished and you have logged in, but **before** you
-run `setup-macos.sh`. You do not need to shut macOS down yourself: `create` stops the VM for a
-clean shutdown (up to two minutes) before it copies anything, and `--start` starts it again. If
-the VM is already stopped, it copies at once. (The container is started with
-`--restart unless-stopped`, so a shutdown from inside macOS can make the container start the VM
-again; `create` copes with that too, because it stops the container.) `restore` removes the container, puts the
-snapshot back and, with `--start`, launches the VM. It asks first, because everything the VM has
+run `setup-macos.sh`. Without options, `create` asks the VM to shut down and waits up to two
+minutes; **macOS in this setup ignores that request**, so the VM is powered off, like a power cut.
+APFS recovers from that and the snapshot almost certainly works, but it is not clean. The tool says
+`forced` when it happens, and `list` shows it in the SHUTDOWN column.
+
+For a snapshot that is certain to be clean, use `--wait`:
+
+```bash
+./snapshot-macos.sh create fresh-install --wait --start
+```
+
+It does not stop the VM. It waits (10 minutes, or `WAIT_TIMEOUT=<seconds>`) while **you shut macOS
+down from inside: Apple menu > Shut Down**. As soon as the VM has stopped, it makes the snapshot,
+and `--start` starts the VM again. (The container has `--restart unless-stopped`, which would start
+the VM again at once. So the tool switches that off while it waits and puts it back afterwards, also
+after Ctrl-C.) If the VM is already stopped, `create` copies at once. `restore` removes the
+container, puts the snapshot back and, with `--start`, launches the VM. It asks first, because everything the VM has
 done since the snapshot is lost. `--yes` skips the question.
 
 **How it works.** A snapshot is a copy of `macos-data/`: the disk, the OpenCore boot disk, the
@@ -249,7 +261,7 @@ logged in. `../README.md` explains how it works. Run it **after** macOS is insta
 service gets the full 16 GB (an AMD host gets 8 GB until a data disk exists).
 
 - From then on use `systemctl --user start|stop|status macos15.service`, not the launcher. Stopping
-  is a clean shutdown and takes up to 2.5 minutes. Do not run both: they use the same disk.
+  asks macOS to shut down and takes up to 2.5 minutes (macOS may ignore the request, and then power is cut). Do not run both: they use the same disk.
 - `install.sh` offers to remove the container the launcher made, and keeps the disk.
 - If you shut macOS down from inside, the service does not restart it. A crash does restart it.
 - `snapshot-macos.sh` sees the service, and stops and starts the VM through it.
@@ -413,6 +425,8 @@ It runs second, so the VM does not sleep or lock during the long installs.
 - **Natural scrolling** is off, so the mouse wheel scrolls the usual way. It is one
   setting for the mouse and the trackpad.
 - **Spotlight indexing and Time Machine** are off. They use CPU and disk for nothing.
+- **Automatic login** is on: the VM goes straight to the desktop of the account that ran the
+  script, after a restart or a crash, with nobody to type a password. See below.
 - **Dialogs nobody can answer** are off: the Bluetooth keyboard pairing window, the
   crash report dialog, and the iCloud, Siri and privacy prompts.
 
@@ -420,6 +434,27 @@ Reduce Motion, Reduce Transparency and the scroll direction show only after you 
 out and in. macOS refuses some settings. The script lists them at the end. For
 Reduce Motion and Reduce Transparency, set them in **System Settings >
 Accessibility > Display**.
+
+### Automatic login
+
+To log in by itself, macOS has to keep the account's password, so the script has to ask for it.
+Early in phase 2 it runs `sudo sysadminctl -autologin set -userName <you> -password -`, and the
+`-` makes **macOS itself prompt** for the password at the terminal. Type it (nothing is shown).
+The script never sees the password, never writes it to the log and never puts it on a command
+line. It is skipped when:
+
+- it is already set up for that account, so a re-run does not ask again;
+- **FileVault** is on, because the disk is locked until the password is typed, so macOS cannot log
+  in by itself then;
+- there is no terminal to type in (for example a run over a pipe). The script prints the command to
+  run yourself later.
+
+**The trade-off:** macOS keeps the password in `/etc/kcpassword`, which is only *lightly
+obfuscated*: anyone who can read the VM disk can recover it. For a local test VM that is usually
+fine; it is also why macOS leaves this off by default. If the password was wrong, auto-login does
+not work at the next start: run the command above again. To turn it off: `sudo sysadminctl
+-autologin off`. `--skip-autologin` skips the step, and `AUTOLOGIN_USER=<name>` sets it up for
+another account. The step is part of the tuning phase, so `--skip-tuning` skips it too.
 
 ### Updates
 

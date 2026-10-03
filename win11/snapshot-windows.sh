@@ -2,7 +2,7 @@
 
 # snapshot-windows.sh - snapshots of the Windows 11 VM, to start again from a known state
 #
-# usage: snapshot-windows.sh create  <name> [--start]
+# usage: snapshot-windows.sh create  <name> [--wait] [--start]
 #        snapshot-windows.sh restore <name> [--yes] [--start]
 #        snapshot-windows.sh list
 #        snapshot-windows.sh delete  <name> [--yes]

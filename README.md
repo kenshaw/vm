@@ -54,14 +54,14 @@ starts when the computer starts, whether or not anyone is logged in, and runs as
   fills them in, checks the result with Podman's own Quadlet generator (a dry run that changes
   nothing), and installs them in `~/.config/containers/systemd/`. Quadlet turns each into a service.
 - They have the same settings as the launchers: same ports, devices, volumes and 120 second stop
-  time, so Windows and macOS shut down cleanly when the service stops.
+  time, so the service asks the guest to shut down and waits up to two minutes before it cuts power. Windows normally shuts down when asked; macOS here did not.
 - It turns on **lingering** (`loginctl enable-linger`), which is what lets a user's services start at
   boot. If your system does not let a user do that, it tells you to run `sudo loginctl enable-linger
   $USER`.
 - A container that a launcher made has the same name and uses the same VM disk. `install.sh` offers
-  to remove it (a clean shutdown first; the disk is kept), so only one of them runs.
+  to remove it (it is stopped first; the disk is kept), so only one of them runs.
 - The service restarts only if the VM crashes. If you shut the guest down from inside, it stays
-  off. Stopping the service is a clean shutdown and takes up to 2.5 minutes.
+  off. Stopping the service asks the guest to shut down and takes up to 2.5 minutes.
 - Settings (`RAM_SIZE`, `CPU_CORES`, `DISK_SIZE`, `VERSION`, ports, `DISK_FMT`, `WIN_USERNAME`,
   `WIN_PASSWORD`) come from the environment, for one VM at a time: `RAM_SIZE=12G ./install.sh macos15`.
   Run it again to change them, then `systemctl --user restart macos15.service`.
@@ -74,7 +74,7 @@ From then on, use systemd to run them, not the launchers:
 
 ```
 systemctl --user start macos15.service
-systemctl --user stop macos15.service       # a clean shutdown
+systemctl --user stop macos15.service       # asks the guest to shut down, up to 2.5 minutes
 systemctl --user status macos15.service
 journalctl --user -u macos15.service -f
 ```
@@ -89,7 +89,7 @@ left on.
 `macos15/snapshot-macos.sh` and `win11/snapshot-windows.sh` (both run `snapshot-vm.sh`):
 
 ```
-create <name> [--start]    restore <name> [--yes] [--start]    list    delete <name>
+create <name> [--wait] [--start]    restore <name> [--yes] [--start]    list    delete <name>
 ```
 
 A snapshot is a btrfs reflink copy of the VM's data folder, which takes a moment and costs almost no
