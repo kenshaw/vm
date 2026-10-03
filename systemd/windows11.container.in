@@ -1,0 +1,53 @@
+# Windows 11 VM, as a systemd user service (a Podman Quadlet).
+#
+# ../install.sh fills in the @...@ values and puts the result in
+# ~/.config/containers/systemd/windows11.container. Do not edit that copy: change this file,
+# or the environment you run install.sh with, and run install.sh again.
+#
+# The settings are the same as in ../win11/launch-windows.sh.
+
+[Unit]
+Description=Windows 11 VM (dockurr/windows)
+
+[Container]
+ContainerName=windows11
+Image=docker.io/dockurr/windows:latest
+
+# only this computer can reach the VM: the web viewer, remote desktop and ssh
+PublishPort=127.0.0.1:@WEB_PORT@:8006
+PublishPort=127.0.0.1:@RDP_PORT@:3389/tcp
+PublishPort=127.0.0.1:@RDP_PORT@:3389/udp
+PublishPort=127.0.0.1:@SSH_PORT@:22/tcp
+
+Environment=VERSION=@VERSION@
+Environment=DISK_SIZE=@DISK_SIZE@
+Environment=RAM_SIZE=@RAM_SIZE@
+Environment=CPU_CORES=@CPU_CORES@
+
+# hardware acceleration, and a network device for the VM
+AddDevice=/dev/kvm
+AddDevice=/dev/net/tun
+AddCapability=NET_ADMIN
+GroupAdd=keep-groups
+
+# the VM disk; a folder shared with the VM (drive Z:); and the same folder as /oem, whose
+# install.bat runs by itself at the end of a fresh install
+Volume=@DIR@/windows-data:/storage
+Volume=@DIR@/shared:/shared
+Volume=@DIR@/shared:/oem
+
+# time for Windows to shut down cleanly when the service stops
+StopTimeout=120
+
+[Service]
+# Restart only when the VM crashes. If you shut Windows down from inside, it stays off.
+Restart=on-failure
+RestartSec=15
+# the first start downloads the image
+TimeoutStartSec=900
+# longer than the StopTimeout above
+TimeoutStopSec=150
+
+[Install]
+# start when the user's systemd starts, which is at boot when lingering is on
+WantedBy=default.target

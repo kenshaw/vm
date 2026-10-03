@@ -1,0 +1,52 @@
+# macOS 15 VM, as a systemd user service (a Podman Quadlet).
+#
+# ../install.sh fills in the @...@ values and puts the result in
+# ~/.config/containers/systemd/macos15.container. Do not edit that copy: change this file,
+# or the environment you run install.sh with, and run install.sh again.
+#
+# The settings are the same as in ../macos15/launch-macos.sh.
+
+[Unit]
+Description=macOS 15 VM (dockurr/macos)
+
+[Container]
+ContainerName=macos15
+Image=docker.io/dockurr/macos:latest
+
+# only this computer can reach the VM: the web viewer, VNC and ssh
+PublishPort=127.0.0.1:@WEB_PORT@:8006
+PublishPort=127.0.0.1:@VNC_PORT@:5900/tcp
+PublishPort=127.0.0.1:@VNC_PORT@:5900/udp
+PublishPort=127.0.0.1:@SSH_PORT@:22/tcp
+
+Environment=VERSION=@VERSION@
+Environment=DISK_SIZE=@DISK_SIZE@
+Environment=RAM_SIZE=@RAM_SIZE@
+Environment=CPU_CORES=@CPU_CORES@
+@EXTRA_ENV@
+
+# hardware acceleration, and a network device for the VM
+AddDevice=/dev/kvm
+AddDevice=/dev/net/tun
+AddCapability=NET_ADMIN
+GroupAdd=keep-groups
+
+# the VM disk, and a folder shared with the VM (`sudo -S mount_9p shared` in macOS)
+Volume=@DIR@/macos-data:/storage
+Volume=@DIR@/shared:/shared
+
+# time for macOS to shut down cleanly when the service stops
+StopTimeout=120
+
+[Service]
+# Restart only when the VM crashes. If you shut macOS down from inside, it stays off.
+Restart=on-failure
+RestartSec=15
+# the first start downloads the image
+TimeoutStartSec=900
+# longer than the StopTimeout above
+TimeoutStopSec=150
+
+[Install]
+# start when the user's systemd starts, which is at boot when lingering is on
+WantedBy=default.target
