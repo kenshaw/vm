@@ -98,7 +98,7 @@ RUN_ARGS=(
     -v "$STORAGE_DIR:/storage"
     -v "$SHARED_DIR:/shared"
     --stop-timeout 120
-    --restart unless-stopped
+    --restart on-failure
 )
 if [ -n "$DISK_FMT" ]; then
     RUN_ARGS+=(-e DISK_FMT="$DISK_FMT")

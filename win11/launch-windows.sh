@@ -93,7 +93,7 @@ RUN_ARGS=(
     -v "$STORAGE_DIR:/storage"
     -v "$SHARED_DIR:/shared"
     --stop-timeout 120
-    --restart unless-stopped
+    --restart on-failure
 )
 # dockur copies /oem to C:\OEM and runs its install.bat at the end of a fresh install
 if [ "$OEM" = 1 ]; then

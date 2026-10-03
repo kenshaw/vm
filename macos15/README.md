@@ -214,9 +214,10 @@ For a snapshot that is certain to be clean, use `--wait`:
 
 It does not stop the VM. It waits (10 minutes, or `WAIT_TIMEOUT=<seconds>`) while **you shut macOS
 down from inside: Apple menu > Shut Down**. As soon as the VM has stopped, it makes the snapshot,
-and `--start` starts the VM again. (The container has `--restart unless-stopped`, which would start
-the VM again at once. So the tool switches that off while it waits and puts it back afterwards, also
-after Ctrl-C.) If the VM is already stopped, `create` copies at once. `restore` removes the
+and `--start` starts the VM again. (The container restarts only after a crash, so a shutdown
+from inside stays off. If an older container still has `--restart unless-stopped`, the tool switches
+that off while it waits and puts it back afterwards, also after Ctrl-C. Change it for good with
+`podman update --restart=on-failure macos15`.) If the VM is already stopped, `create` copies at once. `restore` removes the
 container, puts the snapshot back and, with `--start`, launches the VM. It asks first, because everything the VM has
 done since the snapshot is lost. `--yes` skips the question.
 
