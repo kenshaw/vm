@@ -15,8 +15,9 @@
 #      install point releases (15.x) by itself and never a major upgrade, and
 #      logs in as you by itself at the login window (it asks for your password).
 #   3. installs the Xcode Command Line Tools
-#   4. installs full Xcode from the Xcode_*.xip that you put in the shared
-#      folder. Apple requires a sign in to download Xcode, so that is by hand.
+#   4. installs full Xcode from the Xcode_*.xip that you put in the downloads
+#      folder on the host (~/.local/share/vm/downloads), which the VM sees as
+#      /Volumes/shared/downloads. Apple requires a sign in to download Xcode, so that is by hand.
 #   5. installs Homebrew
 #   6. installs the command line tools (GNU userland, tools, languages): with
 #      Homebrew, or with MacPorts on an Intel Mac (see PACKAGES below). It makes
@@ -94,8 +95,8 @@
 # of the one that Homebrew or MacPorts installed.
 # PUBLIC_KEY in the environment replaces the key that is authorized for ssh.
 # XCODE_SOURCE in the environment names the Xcode_*.xip (or an Xcode.app) to
-# install. The default is the newest one in the folder of this script, or in
-# /Volumes/shared.
+# install. The default is the newest one in the downloads folder next to this script
+# (/Volumes/shared/downloads), then in the folder of this script, or in /Volumes/shared.
 # WALLPAPER_FILE in the environment names a PNG, JPEG or HEIC to use as the
 # wallpaper, in place of the default one of this macOS release.
 #
@@ -928,7 +929,8 @@ why_xcode_wont_run() {
 }
 
 # The Xcode to install: XCODE_SOURCE, or the newest Xcode*.xip (then Xcode*.app)
-# in the folder of this script or in /Volumes/shared. It sets XCODE_SRC. It does
+# in the downloads folder next to this script (/Volumes/shared/downloads in the VM),
+# or in the folder of this script or in /Volumes/shared. It sets XCODE_SRC. It does
 # not print it, because a $(...) would run in a subshell and lose XCODE_PASSED_OVER.
 #
 # A file is passed over when its name shows that it cannot run on this Mac (see
@@ -942,7 +944,7 @@ find_xcode_source() {
         XCODE_SRC="$XCODE_SOURCE"
         return
     fi
-    for dir in "$SCRIPT_DIR" /Volumes/shared; do
+    for dir in "$SCRIPT_DIR/downloads" /Volumes/shared/downloads "$SCRIPT_DIR" /Volumes/shared; do
         for kind in xip app; do
             best=''
             # a loop on lines, so a name with a space (a browser can add one) works
@@ -993,7 +995,7 @@ if [ "$SKIP_XCODE" = 0 ]; then
             fail "no Xcode here can run on this Mac:$XCODE_PASSED_OVER
     Download Xcode 26.3 from developer.apple.com/download/all (the newest that runs on macOS 15), put it in the shared folder, and run this script again"
         elif [ -z "$XCODE_SRC" ]; then
-            fail 'no Xcode_*.xip found. Download it from developer.apple.com/download/all (it needs your Apple ID), put it in the shared folder, and run this script again'
+            fail 'no Xcode_*.xip found. Download it from developer.apple.com/download/all (it needs your Apple ID), put it in ~/.local/share/vm/downloads on the host (the VM sees it as /Volumes/shared/downloads), and run this script again'
         elif [ ! -e "$XCODE_SRC" ]; then
             fail "XCODE_SOURCE $XCODE_SRC does not exist"
         else

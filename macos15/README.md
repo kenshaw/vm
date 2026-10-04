@@ -10,7 +10,7 @@ disk. You install macOS by hand in the web viewer. Then one script sets up the r
 | `snapshot-macos.sh` | saves and restores snapshots of the VM, to start again from a known state. It runs `../snapshot-vm.sh`, which the Windows VM uses too |
 | `~/.local/share/vm/macos15/snapshots/` | the snapshots (created by `snapshot-macos.sh`). They are outside the repository, with the disk: see `../README.md` (`VM_DATA`) |
 | `logs/` | logs kept for reference, such as the first VM run |
-| `shared/Xcode_*.xip` | **you add this**: the Xcode download (see step 3) |
+| `~/.local/share/vm/downloads/Xcode_*.xip` | **you add this**, outside the repository: the Xcode download (see step 3). The VM sees the folder as `/Volumes/shared/downloads` |
 | `~/.local/share/vm/macos15/data/` | the VM disk and the recovery image. It is kept between runs |
 | `shared/` | a folder shared with the VM |
 
@@ -29,7 +29,7 @@ as you, in rootless Podman. To start it at boot as a systemd service, see *Run a
 2. Install macOS in the web viewer (step 2).
 3. On your own machine, download **Xcode 26.3** (not the newest: 26.4 and newer
    need macOS 26) from https://developer.apple.com/download/all/ and put the
-   `Xcode_*.xip` file in `macos15/shared/` (step 3).
+   `Xcode_*.xip` file in `~/.local/share/vm/downloads/` (step 3).
 4. In the VM, in Terminal:
    ```
    sudo -S mount_9p shared
@@ -82,8 +82,10 @@ download it by hand, and the script installs it from the shared folder.
 
 1. Open https://developer.apple.com/download/all/ and sign in with your Apple ID.
 2. Search for **Xcode** and download the `.xip` file.
-3. Put the file in `macos15/shared/` on the host. Leave the name as Apple made it
-   (`Xcode_<version>.xip`).
+3. Put the file in `~/.local/share/vm/downloads/` on the host (`$VM_DATA/downloads`; the
+   launcher makes the folder). Leave the name as Apple made it (`Xcode_<version>.xip`). That folder
+   is outside the repository, so the file cannot be committed or deleted with it, and the VM
+   sees it as `/Volumes/shared/downloads`.
 
 **Which version: Xcode 26.3.** The newest Xcode is not the right one for this VM. It is an
 Intel Mac that runs macOS 15, and each Xcode needs a macOS that is new enough:
@@ -291,7 +293,7 @@ service gets the full 16 GB (an AMD host gets 8 GB until a data disk exists).
 To throw the VM away and install again, with no snapshot:
 
 1. `podman rm --force macos15`
-2. Delete the contents of `~/.local/share/vm/macos15/data/`. Keep `shared/`, which holds the script and the Xcode `.xip`.
+2. Delete the contents of `~/.local/share/vm/macos15/data/`. Keep `shared/`, which holds the script (the Xcode `.xip` is in `~/.local/share/vm/downloads/`, and is not touched).
 3. `./launch-macos.sh`. It gives the install 8 GB again, because there is no data disk.
 4. Install macOS by hand (steps above).
 
@@ -647,7 +649,7 @@ no Intel bottle of `dockutil` for macOS 15, so it would build from source.
 ### Xcode (phase 4)
 
 1. It does nothing if an `Xcode*.app` is already in `/Applications`, except step 5.
-2. It finds the `.xip` in the folder of the script, then in `/Volumes/shared`. A file
+2. It finds the `.xip` in `downloads/` next to the script (`/Volumes/shared/downloads`), then in the folder of the script, then in `/Volumes/shared`. A file
    whose name shows that it cannot run here (Xcode 26.4 or newer on macOS 15, Xcode 27,
    or an Apple silicon download) is passed over. It needs about 35 GB of free disk and
    stops if there is less.
@@ -664,7 +666,7 @@ no Intel bottle of `dockutil` for macOS 15, so it would build from source.
 Simulators are not installed. Add one with `xcodebuild -downloadPlatform iOS`. It is
 several GB.
 
-Your `.xip` is not deleted. You can delete it from `shared/` after the install.
+Your `.xip` is not deleted. You can delete it from `~/.local/share/vm/downloads/` after the install.
 
 ### ssh (phase 10)
 
@@ -732,7 +734,7 @@ Two things from the VM guides were left out on purpose:
 | problem | what to do |
 |---|---|
 | `/Volumes/shared` is missing | Run `sudo -S mount_9p shared`. If that fails, run `mount \| grep 9p` and `ls /Volumes`. The container must be created by `launch-macos.sh`, which adds the share. |
-| the script says no `.xip` was found | Put `Xcode_*.xip` in `macos15/shared/` and run the script again. |
+| the script says no `.xip` was found | Put `Xcode_*.xip` in `~/.local/share/vm/downloads/` on the host (`/Volumes/shared/downloads` in the VM; run `sudo -S mount_9p shared` first) and run the script again. |
 | the script says no Xcode here can run on this Mac, or that an Xcode needs a newer macOS or is for Apple silicon only | The Xcode is too new for macOS 15 (26.4 and newer) or is Xcode 27. Download **Xcode 26.3** from https://developer.apple.com/download/all/ and run the script again. If the message came after an expand, delete `~/xcode-install` first to free about 15 GB. |
 | Remote Login fails | The terminal needs Full Disk Access. Turn on **System Settings > General > Sharing > Remote Login** by hand. |
 | a cask or formula failed | The name may have moved. Run `brew search <name>`, then run the script again. |

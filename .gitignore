@@ -5,8 +5,11 @@ win11/windows-data/
 macos15/snapshots/
 win11/snapshots/
 
-# Xcode, which is downloaded by hand (2.7 GB)
+# Xcode, which is downloaded by hand (2.7 GB). It belongs in ~/.local/share/vm/downloads/,
+# which the macOS VM sees as /Volumes/shared/downloads. These keep one from being added by
+# accident, and the mount point that podman makes in shared/.
 *.xip
+macos15/shared/downloads/
 
 # logs: the setup scripts write them, and they are kept for reference only
 logs/

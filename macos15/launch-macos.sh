@@ -20,9 +20,13 @@ HERE="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CONTAINER_NAME="macos15"
 IMAGE="docker.io/dockurr/macos:latest"
-# the VM disk and the snapshots are not in this repository: they are in $VM_DATA/macos15/
-# (default ~/.local/share/vm/macos15/). STORAGE_DIR overrides the data folder.
-STORAGE_DIR="${STORAGE_DIR:-${VM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/vm}/macos15/data}"
+# the VM disk, the snapshots and the downloads (Xcode) are not in this repository: they
+# are in $VM_DATA (default ~/.local/share/vm/). STORAGE_DIR overrides the folder of the
+# disk, and DOWNLOADS_DIR the folder of the Xcode .xip. The VM sees DOWNLOADS_DIR as
+# /Volumes/shared/downloads.
+VM_DATA="${VM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/vm}"
+STORAGE_DIR="${STORAGE_DIR:-$VM_DATA/macos15/data}"
+DOWNLOADS_DIR="${DOWNLOADS_DIR:-$VM_DATA/downloads}"
 SHARED_DIR="$HERE/shared"
 
 VERSION="${VERSION:-15}"
@@ -98,6 +102,7 @@ RUN_ARGS=(
     --cap-add NET_ADMIN
     --group-add keep-groups
     -v "$STORAGE_DIR:/storage"
+    -v "$DOWNLOADS_DIR:/shared/downloads:ro"
     -v "$SHARED_DIR:/shared"
     --stop-timeout 120
     --restart on-failure
@@ -114,7 +119,7 @@ if [ "$DRY_RUN" = 1 ]; then
 fi
 
 # 5. Create the storage and shared directories if they don't exist
-mkdir -p "$STORAGE_DIR" "$SHARED_DIR"
+mkdir -p "$STORAGE_DIR" "$SHARED_DIR" "$DOWNLOADS_DIR"
 echo "Storage directory: $STORAGE_DIR"
 echo "Shared directory:  $SHARED_DIR  (run 'sudo -S mount_9p shared' in macOS)"
 

@@ -34,6 +34,8 @@ GroupAdd=keep-groups
 # the VM disk, and a folder shared with the VM (`sudo -S mount_9p shared` in macOS)
 Volume=@STORAGE@:/storage
 Volume=@DIR@/shared:/shared
+# the Xcode .xip and other big downloads, kept outside the repository
+Volume=@DOWNLOADS@:/shared/downloads:ro
 
 # time the guest gets to shut down when the service stops; after it, QEMU is killed
 # (macOS in this setup ignores the request, so it is always killed after this time)

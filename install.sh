@@ -136,6 +136,7 @@ load_vm() {
             UNIT=macos15
             DIR="$HERE/macos15"
             V_STORAGE="${STORAGE_DIR:-$VM_DATA/macos15/data}"
+            V_DOWNLOADS="${DOWNLOADS_DIR:-$VM_DATA/downloads}"
             V_VERSION="${VERSION:-15}"
             V_DISK_SIZE="${DISK_SIZE:-100G}"
             V_RAM_SIZE="${RAM_SIZE:-16G}"
@@ -153,6 +154,7 @@ load_vm() {
             UNIT=windows11
             DIR="$HERE/win11"
             V_STORAGE="${STORAGE_DIR:-$VM_DATA/win11/data}"
+            V_DOWNLOADS=""
             V_VERSION="${VERSION:-11}"
             V_DISK_SIZE="${DISK_SIZE:-128G}"
             V_RAM_SIZE="${RAM_SIZE:-16G}"
@@ -189,6 +191,7 @@ render() {
     sed \
         -e "s|@DIR@|$(sed_escape "$DIR")|g" \
         -e "s|@STORAGE@|$(sed_escape "$V_STORAGE")|g" \
+        -e "s|@DOWNLOADS@|$(sed_escape "$V_DOWNLOADS")|g" \
         -e "s|@VERSION@|$(sed_escape "$V_VERSION")|g" \
         -e "s|@DISK_SIZE@|$(sed_escape "$V_DISK_SIZE")|g" \
         -e "s|@RAM_SIZE@|$(sed_escape "$V_RAM_SIZE")|g" \
@@ -310,6 +313,7 @@ install_vm() {
 
     # Podman fails to start a container whose bind mount does not exist
     mkdir -p "$V_STORAGE" "$DIR/shared"
+    [ -z "$V_DOWNLOADS" ] || mkdir -p "$V_DOWNLOADS"
 
     adopt_existing_container
 

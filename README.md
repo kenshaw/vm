@@ -112,4 +112,5 @@ snapshots are **not in the repository**: they are in a data folder, `~/.local/sh
 The launchers, `install.sh` and the snapshot tools all use it, so set `VM_DATA` the same way for
 all of them (or `STORAGE_DIR` for one VM's disk). It must be on a btrfs file system for snapshots
 to be instant, and all of one VM's folders must be on the same file system. `.gitignore` keeps out
-the logs and Xcode (`*.xip`).
+the logs and Xcode (`*.xip`). Xcode and other big downloads go in `~/.local/share/vm/downloads/`
+(`$VM_DATA/downloads`), which the macOS VM sees as `/Volumes/shared/downloads`.
