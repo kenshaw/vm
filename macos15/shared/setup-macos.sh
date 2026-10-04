@@ -53,7 +53,7 @@
 #                       [--skip-wallpaper] [--skip-dock] [--skip-ssh]
 #                       [--skip-xcode] [--skip-shell] [--skip-bashrc]
 #                       [--skip-go] [--update-go] [--skip-autologin]
-#                       [--skip-keyboard] [--skip-browsers] [--no-reboot]
+#                       [--skip-keyboard] [--skip-browsers] [--no-shutdown]
 #
 # --packages (or PACKAGES in the environment) says how the command line tools are
 # installed:
@@ -77,11 +77,13 @@
 # of the one that runs this script.
 # KEYBOARD_TYPE in the environment is ansi (the default), iso or jis: the keyboard layout
 # that is saved so that the Keyboard Setup Assistant stops asking. See phase 2.
-# When every step succeeded, the VM restarts by itself, 15 seconds after the summary
-# (REBOOT_DELAY in the environment changes that; Ctrl-C cancels it): the key repeat,
-# scroll direction and reduce motion only show after a log out and in, and the restart
-# also tries the automatic login. It does not restart when a step failed, so that you can
-# read the summary. --no-reboot never restarts.
+# When every step succeeded, the VM shuts down by itself, 15 seconds after the summary
+# (SHUTDOWN_DELAY in the environment changes that; Ctrl-C cancels it). The key repeat,
+# scroll direction and reduce motion only show after a restart, and a restart from inside
+# the guest has hung this VM (all CPUs busy, no screen), so the script shuts down and
+# you start the VM again from the host: podman start macos15, or the systemd service.
+# It does not shut down when a step failed, so that you can read the summary.
+# --no-shutdown (or --no-reboot, the old name) never shuts down.
 # --skip-browsers leaves the browsers as they come. Otherwise Firefox becomes the default
 # browser, and the first-run screens of Firefox and Chrome are turned off (see phase 7).
 # KEY_REPEAT and INITIAL_KEY_REPEAT in the environment set how fast a held key repeats
@@ -242,7 +244,7 @@ SKIP_GO=0
 SKIP_AUTOLOGIN=0
 SKIP_KEYBOARD=0
 SKIP_BROWSERS=0
-NO_REBOOT=0
+NO_SHUTDOWN=0
 UPDATE_GO=0
 SKIP_FORMULAE=0
 SKIP_CASKS=0
@@ -260,7 +262,7 @@ for arg in "$@"; do
         --skip-autologin) SKIP_AUTOLOGIN=1 ;;
         --skip-keyboard) SKIP_KEYBOARD=1 ;;
         --skip-browsers) SKIP_BROWSERS=1 ;;
-        --no-reboot)     NO_REBOOT=1 ;;
+        --no-shutdown|--no-reboot) NO_SHUTDOWN=1 ;;
         --update-go)     UPDATE_GO=1 ;;
         --skip-formulae) SKIP_FORMULAE=1 ;;
         --skip-casks)    SKIP_CASKS=1 ;;
@@ -425,29 +427,30 @@ set_chrome_policies() {
     fi
 }
 
-# ----[ restart ]---------------------------------------------------------------
+# ----[ shutdown ]-------------------------------------------------------------
 
-# reboot_now: counts down, so that Ctrl-C can cancel it, then restarts. It runs after
-# the log is complete. REBOOT_COMMAND (in the environment) replaces the restart
-# command, for tests.
-reboot_now() {
-    local n="${REBOOT_DELAY:-15}"
+# shutdown_now: counts down, so that Ctrl-C can cancel it, then shuts the VM down. It
+# runs after the log is complete. SHUTDOWN_COMMAND (in the environment) replaces the
+# shutdown command, for tests.
+shutdown_now() {
+    local n="${SHUTDOWN_DELAY:-15}"
     case "$n" in ''|*[!0-9]*) n=15 ;; esac
-    trap 'printf "\n    restart cancelled. Restart when you like: sudo shutdown -r now\n"; exit 0' INT
-    printf '\n    Everything succeeded. Restarting the VM in %s seconds, so that the settings take effect.\n' "$n"
-    printf '    Press Ctrl-C to cancel.\n'
+    trap 'printf "\n    shutdown cancelled. Shut down when you like: sudo shutdown -h now\n"; exit 0' INT
+    printf '\n    Everything succeeded. Shutting the VM down in %s seconds.\n' "$n"
+    printf '    Start it again from the host (podman start macos15, or systemctl --user start macos15.service),\n'
+    printf '    so that the settings that need a restart take effect. Press Ctrl-C to cancel.\n'
     while [ "$n" -gt 0 ]; do
-        printf '\r    restarting in %2d ' "$n"
+        printf '\r    shutting down in %2d ' "$n"
         sleep 1
         n=$((n - 1))
     done
-    printf '\r    restarting now      \n'
+    printf '\r    shutting down now      \n'
     sync
-    if [ -n "${REBOOT_COMMAND:-}" ]; then
+    if [ -n "${SHUTDOWN_COMMAND:-}" ]; then
         # shellcheck disable=SC2086
-        $REBOOT_COMMAND
+        $SHUTDOWN_COMMAND
     else
-        sudo shutdown -r now
+        sudo shutdown -h now
     fi
     trap - INT
 }
@@ -473,8 +476,8 @@ if [ -z "$SETUP_MACOS_LOGGING" ]; then
         exit "$SETUP_RC"
     } | tee -a "${SETUP_LOGS[@]}"
     SETUP_RC="${PIPESTATUS[0]}"
-    if [ "$SETUP_RC" = 0 ] && [ "$NO_REBOOT" = 0 ]; then
-        reboot_now
+    if [ "$SETUP_RC" = 0 ] && [ "$NO_SHUTDOWN" = 0 ]; then
+        shutdown_now
     fi
     exit "$SETUP_RC"
 fi
@@ -872,7 +875,7 @@ EOF
         note 'some settings were refused (listed above); macOS 15 blocks some of them from a script'
     fi
     note 'turn on Reduce transparency (and Reduce motion) in System Settings > Accessibility > Display: macOS 15 does not let a script do it'
-    note 'log out and in (or reboot) so the scroll direction, the key repeat and reduce motion show'
+    note 'log out and in (or restart) so the scroll direction, the key repeat and reduce motion show'
     note 'point releases install by themselves and restart the VM; a major upgrade (macOS 26) never does, so do not click Upgrade Now'
 fi
 

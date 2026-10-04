@@ -166,14 +166,23 @@ To put a copy in the shared folder, run `sudo cp ~/setup-macos.log /Volumes/shar
 --skip-tuning  --skip-formulae  --skip-casks  --skip-wallpaper
 --skip-dock    --skip-ssh       --skip-xcode    --skip-shell    --skip-bashrc
 --skip-go      --update-go     --skip-autologin   --skip-keyboard
---skip-browsers  --no-reboot
+--skip-browsers  --no-shutdown
 ```
 
-When **every step succeeded**, the VM **restarts by itself** 15 seconds after the summary, so that
-the key repeat, the scroll direction and the other log-out-and-in settings take effect, and so that
-automatic login is tried. Ctrl-C in those 15 seconds cancels it. It does not restart when a step
-failed, so you can read the summary. `--no-reboot` never restarts, and `REBOOT_DELAY=<seconds>`
-changes the wait.
+When **every step succeeded**, the VM **shuts down by itself** 15 seconds after the summary.
+Ctrl-C in those 15 seconds cancels it. It does not shut down when a step failed, so you can read the
+summary. Start the VM again from the host: `podman start macos15`, or
+`systemctl --user start macos15.service` with the systemd unit. That start is the restart that the
+key repeat, the scroll direction and reduce motion need, and automatic login is tried then.
+`--no-shutdown` (the old name `--no-reboot` works too) never shuts down, and
+`SHUTDOWN_DELAY=<seconds>` changes the wait.
+
+**Why a shutdown and not a restart:** twice (at the end of the macOS install, and after this
+script) a restart from inside the guest hung this VM: all 8 CPUs busy, a frozen screen, no ssh,
+until the container was restarted from the host. A shutdown has worked every time. The script runs
+`sudo shutdown -h now`; if that halts the guest without powering off the VM (the container stays
+up with no CPU use), stop it with `podman stop macos15`, and `SHUTDOWN_COMMAND` in the environment
+replaces the command. Not yet seen end to end: this exact command has not run in the VM.
 
 `--update-go` runs `go-setup.sh` again when Go is already installed. Without it, an existing
 Go is left alone.
