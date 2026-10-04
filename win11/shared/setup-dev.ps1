@@ -480,7 +480,23 @@ if (-not $SkipSsh) {
     }
 
     Write-Step 'enabling sshd + ssh-agent'
+    # The capability can report "installed" before Windows has registered its sshd service.
+    # That happens while a restart is pending (the Windows Update phase above leaves one),
+    # and the service then appears after the restart. So wait a minute for it, and when it
+    # does not come, say so and go on, instead of failing on a service that is not there yet.
+    $sshdPending = $false
+    $waited = 0
+    while (-not (Get-Service -Name sshd -ErrorAction SilentlyContinue) -and $waited -lt 60) {
+        Start-Sleep -Seconds 5
+        $waited += 5
+    }
+    if (-not (Get-Service -Name sshd -ErrorAction SilentlyContinue)) {
+        $sshdPending = $true
+        Write-Skip 'the sshd service is not registered yet: Windows needs a restart first'
+        Add-Note 'sshd is not registered yet (Windows has a restart pending). Restart Windows, then run this script again: it skips what is done, starts sshd and sets the shell and key'
+    }
     foreach ($svc in @('sshd', 'ssh-agent')) {
+        if ($svc -eq 'sshd' -and $sshdPending) { continue }
         try {
             Set-Service -Name $svc -StartupType Automatic
             Start-Service -Name $svc
@@ -582,9 +598,11 @@ if (-not $SkipSsh) {
         Add-Note "authorized key installed for $User (and administrators)"
     }
 
-    Write-Step 'restarting sshd'
-    try { Restart-Service sshd -Force; Write-Ok 'sshd restarted' }
-    catch { Write-Fail "restart sshd: $($_.Exception.Message)" }
+    if (-not $sshdPending) {
+        Write-Step 'restarting sshd'
+        try { Restart-Service sshd -Force; Write-Ok 'sshd restarted' }
+        catch { Write-Fail "restart sshd: $($_.Exception.Message)" }
+    }
 
     Add-Note "ssh from the host (the launcher publishes port 2222): ssh -p 2222 $User@127.0.0.1"
 }

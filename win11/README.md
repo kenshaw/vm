@@ -99,6 +99,11 @@ fails, find the new id with `winget search <name>`.
 **A reboot may be needed.** Windows Update often asks for one. By default the script then stops
 and says so, and the winget half runs at the next logon. If you want it to keep going by itself,
 reboot the VM and run the script again from the shared drive (it skips what is done).
+The same restart can hold back the **OpenSSH server**: the capability installs, but Windows does not
+register the `sshd` service until the restart (seen on a fresh install: "Service sshd was not found").
+The script waits a minute for the service, then says so in a note instead of failing, and still sets
+the shell and the key. After the restart, run the script again: it starts `sshd` and finishes the
+ssh step.
 
 ### The log
 
