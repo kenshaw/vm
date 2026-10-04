@@ -147,7 +147,7 @@ To put a copy in the shared folder, run `sudo cp ~/setup-macos.log /Volumes/shar
 
 | phase | what it does |
 |---|---|
-| 1 | asks for sudo and keeps it alive |
+| 1 | asks for your password **once** and keeps sudo alive (below) |
 | 2 | **VM tuning** (below), including automatic login as you |
 | 3 | Xcode Command Line Tools |
 | 4 | **Xcode**, from the `.xip` in the shared folder (below) |
@@ -525,6 +525,25 @@ key right of the left Shift, then / for the key left of the right Shift.
 **Not tested in a real VM yet:** the step was tested with fake `ioreg` and `defaults` output. If the
 Assistant still comes up after a restart, run the commands above and look at what
 `sudo defaults read /Library/Preferences/com.apple.keyboardtype` shows.
+
+### One password prompt
+
+Phase 1 asks for the password of the account that runs the script, **once**, and checks it with
+`sudo`. The script then uses it for three things, without asking again:
+
+- **sudo.** The sudo ticket is kept fresh in the background. If a program that has no terminal of
+  its own (or a ticket that has run out) needs sudo anyway, `SUDO_ASKPASS` answers it.
+- **Automatic login.** `sysadminctl -autologin ... -password -` asks for the password itself, so the
+  script answers it with `expect` (part of macOS, `/usr/bin/expect`). If that does not work, or
+  `expect` is missing, `sysadminctl` asks you on the terminal as before.
+- **Anything else** in the run that asks, such as a cask installer, gets the password through
+  `SUDO_ASKPASS`.
+
+The password is held in the script's memory and environment (`SETUP_PW`) and nowhere else: it is
+not on a command line (so `ps` does not show it), not written to a file and not in the log. The
+helper that `SUDO_ASKPASS` names holds no password: it reads `SETUP_PW`. It is in a private
+folder under `/tmp` that the script removes when it ends. A run with no terminal (a pipe) cannot
+ask: it needs `sudo` to work without a password.
 
 ### Automatic login
 

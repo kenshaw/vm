@@ -535,12 +535,54 @@ echo "packages: $PACKAGES"
 
 head_ 'phase 1: administrator access'
 
+# The password is asked here, once. It is the password of the account that runs the
+# script, so it does three jobs: it authorizes sudo, it answers every later sudo (through
+# SUDO_ASKPASS, in case the sudo ticket does not carry over to a program that has no
+# terminal of its own), and it answers the password question of the automatic login.
+# It is kept in a shell variable and in the environment of this script and what it starts
+# (SETUP_PW). It is never put on a command line, never written to a file and never printed.
+SETUP_PW=''
+
+# ask_password: asks up to three times, and checks the password with sudo
+ask_password() {
+    local try pw
+    for try in 1 2 3; do
+        printf '    Password of %s (asked once: it is used for sudo and for the automatic login): ' "$USER" >&2
+        IFS= read -rs pw || return 1
+        printf '\n' >&2
+        if printf '%s\n' "$pw" | command sudo -S -p '' -v 2>/dev/null; then
+            SETUP_PW="$pw"
+            return 0
+        fi
+        printf '    That password did not work.\n' >&2
+    done
+    return 1
+}
+
 step 'asking for your password (once)'
-if ! sudo -v; then
+if [ -t 0 ]; then
+    if ! ask_password; then
+        echo "Error: sudo failed. The user must be an administrator, with the right password."
+        exit 1
+    fi
+elif ! command sudo -v; then
     echo "Error: sudo failed. The user must be an administrator."
     exit 1
 fi
 ok 'sudo authorized'
+
+# SUDO_ASKPASS names a program that prints the password. sudo -A runs it when sudo needs
+# a password; when the ticket is valid it is not used. It reads the password from the
+# environment, so no file holds it.
+if [ -n "$SETUP_PW" ]; then
+    ASKPASS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/setup-macos.XXXXXX")"
+    chmod 700 "$ASKPASS_DIR"
+    printf '#!/bin/sh\nprintf "%%s\\n" "$SETUP_PW"\n' > "$ASKPASS_DIR/askpass"
+    chmod 700 "$ASKPASS_DIR/askpass"
+    export SETUP_PW
+    export SUDO_ASKPASS="$ASKPASS_DIR/askpass"
+    sudo() { command sudo -A "$@"; }
+fi
 
 # keep the sudo timestamp fresh until this script exits
 ( while true; do
@@ -549,7 +591,7 @@ ok 'sudo authorized'
       kill -0 "$$" 2>/dev/null || exit 0
   done ) >/dev/null 2>&1 &
 SUDO_KEEPALIVE=$!
-trap 'kill "$SUDO_KEEPALIVE" 2>/dev/null' EXIT
+trap 'kill "$SUDO_KEEPALIVE" 2>/dev/null; [ -n "${ASKPASS_DIR:-}" ] && rm -rf "$ASKPASS_DIR"' EXIT
 
 # ==============================================================================
 #  phase 2: vm tuning
@@ -661,8 +703,31 @@ set_autologin() {
         return 0
     fi
 
-    echo "    macOS needs the password of $u for this. It asks below: type it (nothing is shown)."
-    sudo sysadminctl -autologin set -userName "$u" -password -
+    # With the password from phase 1, expect answers the question that sysadminctl asks
+    # itself (-password - makes it read the password from the terminal, so it is not on a
+    # command line). The password goes to expect through a pipe, not the command line.
+    # If that does not work, sysadminctl asks you.
+    if [ "$u" = "$USER" ] && [ -n "${SETUP_PW:-}" ] && [ -x /usr/bin/expect ] \
+        && printf '%s' "$u" | grep -Eq '^[A-Za-z0-9._-]+$'; then
+        printf '%s\n' "$SETUP_PW" | sudo /usr/bin/expect -c "
+            log_user 0
+            set timeout 60
+            gets stdin pw
+            spawn sysadminctl -autologin set -userName $u -password -
+            expect {
+                -re {(?i)password} { sleep 0.5; send -- \"\$pw\\r\" }
+                timeout { exit 2 }
+                eof { exit 3 }
+            }
+            expect eof
+            catch wait result
+            exit [lindex \$result 3]
+        " >/dev/null 2>&1
+    fi
+    if ! { [ "$(autologin_user_now)" = "$u" ] && sudo test -f "$KCPASSWORD"; }; then
+        echo "    macOS needs the password of $u for this. It asks below: type it (nothing is shown)."
+        sudo sysadminctl -autologin set -userName "$u" -password -
+    fi
 
     if [ "$(autologin_user_now)" = "$u" ] && sudo test -f "$KCPASSWORD"; then
         ok "$u logs in by itself at the login window"
