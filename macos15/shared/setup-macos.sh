@@ -1543,6 +1543,10 @@ install_port() {
         fi
         if printf '%s' "$dep" | grep -Eq "$PYTHON_PORT_RE"; then
             step "no ready-made binary of $dep for this macOS: building it from source without LTO and PGO (a few minutes), then trying $p again"
+            # The binary-only try above stops half way through a +lto+optimizations build
+            # and leaves it behind. MacPorts then refuses other variants ("do not match
+            # those the build was started with"), so clear it first.
+            sudo "$PORT" -N clean "$dep" 2>&1 | dim
             # shellcheck disable=SC2086
             sudo "$PORT" -N install "$dep" $PYTHON_PORT_VARIANTS 2>&1 | dim
             if [ -z "$("$PORT" -q installed "$dep" 2>/dev/null)" ]; then
