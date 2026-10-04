@@ -19,7 +19,7 @@
 # The Windows account is created by that install, with the name WIN_USERNAME
 # (default: user) and the password WIN_PASSWORD (default: the image's own, which is
 # "admin"). Changing either later does not change an installed Windows: to get a
-# different account, wipe windows-data/ and install again.
+# different account, wipe the data folder (see STORAGE_DIR below) and install again.
 #
 # RAM_SIZE, CPU_CORES, DISK_SIZE, VERSION, WEB_PORT, RDP_PORT, SSH_PORT, WIN_USERNAME
 # and WIN_PASSWORD can be set in the environment to override the values below. So can
@@ -33,7 +33,9 @@ HERE="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CONTAINER_NAME="windows11"
 IMAGE="docker.io/dockurr/windows"
-STORAGE_DIR="$HERE/windows-data"
+# the VM disk and the snapshots are not in this repository: they are in $VM_DATA/win11/
+# (default ~/.local/share/vm/win11/). STORAGE_DIR overrides the data folder.
+STORAGE_DIR="${STORAGE_DIR:-${VM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/vm}/win11/data}"
 SHARED_DIR="$HERE/shared"
 
 VERSION="${VERSION:-11}"

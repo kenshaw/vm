@@ -98,5 +98,18 @@ space until the VM changes its disk, so it is cheap to start again from a fresh 
 
 ## Git
 
-The repository tracks the scripts, templates and docs. `.gitignore` keeps out the VM disks
-(`macos-data/`, `windows-data/`, hundreds of GB), the snapshots, the logs and Xcode (`*.xip`).
+The repository tracks the scripts, templates and docs. The VM disks (hundreds of GB) and the
+snapshots are **not in the repository**: they are in a data folder, `~/.local/share/vm/` by default
+(`$XDG_DATA_HOME/vm`, or the folder that `VM_DATA` names):
+
+```
+~/.local/share/vm/macos15/data/        the macOS disk, boot disk and machine identity
+~/.local/share/vm/macos15/snapshots/   its snapshots
+~/.local/share/vm/win11/data/          the Windows disk
+~/.local/share/vm/win11/snapshots/     its snapshots
+```
+
+The launchers, `install.sh` and the snapshot tools all use it, so set `VM_DATA` the same way for
+all of them (or `STORAGE_DIR` for one VM's disk). It must be on a btrfs file system for snapshots
+to be instant, and all of one VM's folders must be on the same file system. `.gitignore` keeps out
+the logs and Xcode (`*.xip`).

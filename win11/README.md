@@ -9,8 +9,8 @@ Runs `docker.io/dockurr/windows` under rootless Podman with 8 CPUs, 16 GB of RAM
 | `shared/setup-dev.ps1` | the setup script. It runs by itself at the end of the install |
 | `shared/install.bat` | the hook that dockur runs, which runs `setup-dev.ps1` |
 | `snapshot-windows.sh` | saves and restores snapshots of the VM, to start again from a known state |
-| `windows-data/` | the VM disk. It is kept between runs |
-| `snapshots/` | the snapshots (created by `snapshot-windows.sh`) |
+| `~/.local/share/vm/win11/data/` | the VM disk. It is kept between runs |
+| `~/.local/share/vm/win11/snapshots/` | the snapshots (created by `snapshot-windows.sh`). They are outside the repository, with the disk: see `../README.md` (`VM_DATA`) |
 
 | what | host address |
 |---|---|
@@ -124,7 +124,7 @@ is set the defaults cannot be changed by hand. To release them, delete the
 ```
 
 It works exactly like the macOS one (`../macos15/README.md` explains it, and `../snapshot-vm.sh` is
-the shared tool): a btrfs reflink copy of `windows-data/`, which takes a moment and uses almost no
+the shared tool): a btrfs reflink copy of `~/.local/share/vm/win11/data/`, which takes a moment and uses almost no
 space until the VM changes the disk. `create` asks Windows to shut down first (Windows normally does; `create` says if it had to cut power, and `create --wait` waits for you to shut down from inside). If the VM runs as a
 systemd service, it is stopped and started through the service.
 
@@ -143,7 +143,7 @@ and the automatic hook would set it up during the install. So install with `--no
 To throw the VM away and install again, for example to get a different account:
 
 1. `podman rm --force windows11` (or `systemctl --user stop windows11.service`)
-2. Delete the contents of `windows-data/`. Keep `shared/`.
+2. Delete the contents of `~/.local/share/vm/win11/data/`. Keep `shared/`.
 3. `./launch-windows.sh`, with `WIN_USERNAME` and `WIN_PASSWORD` set if you want other values.
 
 The VM has a new ssh host key after a reinstall, so run `ssh-keygen -R "[127.0.0.1]:2222"`.

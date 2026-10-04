@@ -45,6 +45,8 @@ set -e
 HERE="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATES="$HERE/systemd"
 QUADLET_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/containers/systemd"
+# the VM disks and snapshots are kept outside this repository (see README.md)
+VM_DATA="${VM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/vm}"
 KVM_DEVICE="${KVM_DEVICE:-/dev/kvm}"
 ME="$(id -un)"
 
@@ -133,7 +135,7 @@ load_vm() {
         macos15)
             UNIT=macos15
             DIR="$HERE/macos15"
-            DATA=macos-data
+            V_STORAGE="${STORAGE_DIR:-$VM_DATA/macos15/data}"
             V_VERSION="${VERSION:-15}"
             V_DISK_SIZE="${DISK_SIZE:-100G}"
             V_RAM_SIZE="${RAM_SIZE:-16G}"
@@ -150,7 +152,7 @@ load_vm() {
         win11)
             UNIT=windows11
             DIR="$HERE/win11"
-            DATA=windows-data
+            V_STORAGE="${STORAGE_DIR:-$VM_DATA/win11/data}"
             V_VERSION="${VERSION:-11}"
             V_DISK_SIZE="${DISK_SIZE:-128G}"
             V_RAM_SIZE="${RAM_SIZE:-16G}"
@@ -186,6 +188,7 @@ render() {
     [ -f "$template" ] || die "missing template $template"
     sed \
         -e "s|@DIR@|$(sed_escape "$DIR")|g" \
+        -e "s|@STORAGE@|$(sed_escape "$V_STORAGE")|g" \
         -e "s|@VERSION@|$(sed_escape "$V_VERSION")|g" \
         -e "s|@DISK_SIZE@|$(sed_escape "$V_DISK_SIZE")|g" \
         -e "s|@RAM_SIZE@|$(sed_escape "$V_RAM_SIZE")|g" \
@@ -276,7 +279,7 @@ apply_install_ram_rule() {
     [ "$UNIT" = macos15 ] || return 0
     [ -z "${RAM_SIZE:-}" ] || return 0
     grep -q AuthenticAMD /proc/cpuinfo 2>/dev/null || return 0
-    if [ -z "$(find "$DIR/$DATA" -type f -name 'data.*' 2>/dev/null | head -n 1)" ]; then
+    if [ -z "$(find "$V_STORAGE" -type f -name 'data.*' 2>/dev/null | head -n 1)" ]; then
         V_RAM_SIZE=8G
         echo "    macOS is not installed yet, and this is an AMD host: the service gets 8G of RAM for the install."
         echo "    After macOS is installed, run ./install.sh macos15 again to move to 16G."
@@ -306,7 +309,7 @@ install_vm() {
     ok "Podman's Quadlet generator accepts the unit"
 
     # Podman fails to start a container whose bind mount does not exist
-    mkdir -p "$DIR/$DATA" "$DIR/shared"
+    mkdir -p "$V_STORAGE" "$DIR/shared"
 
     adopt_existing_container
 
@@ -431,7 +434,7 @@ do_uninstall() {
         ok "systemd has read the change"
     fi
     echo
-    echo "The VM disks in macos15/macos-data and win11/windows-data were not touched."
+    echo "The VM disks and snapshots (in $VM_DATA) were not touched."
     echo "Lingering was left on; turn it off with: loginctl disable-linger $ME"
 }
 

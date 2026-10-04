@@ -8,10 +8,10 @@ disk. You install macOS by hand in the web viewer. Then one script sets up the r
 | `launch-macos.sh` | creates and starts the container |
 | `shared/setup-macos.sh` | sets up macOS after you install it |
 | `snapshot-macos.sh` | saves and restores snapshots of the VM, to start again from a known state. It runs `../snapshot-vm.sh`, which the Windows VM uses too |
-| `snapshots/` | the snapshots (created by `snapshot-macos.sh`) |
+| `~/.local/share/vm/macos15/snapshots/` | the snapshots (created by `snapshot-macos.sh`). They are outside the repository, with the disk: see `../README.md` (`VM_DATA`) |
 | `logs/` | logs kept for reference, such as the first VM run |
 | `shared/Xcode_*.xip` | **you add this**: the Xcode download (see step 3) |
-| `macos-data/` | the VM disk and the recovery image. It is kept between runs |
+| `~/.local/share/vm/macos15/data/` | the VM disk and the recovery image. It is kept between runs |
 | `shared/` | a folder shared with the VM |
 
 | what | host address |
@@ -238,7 +238,7 @@ that off while it waits and puts it back afterwards, also after Ctrl-C. Change i
 container, puts the snapshot back and, with `--start`, launches the VM. It asks first, because everything the VM has
 done since the snapshot is lost. `--yes` skips the question.
 
-**How it works.** A snapshot is a copy of `macos-data/`: the disk, the OpenCore boot disk, the
+**How it works.** A snapshot is a copy of the data folder (`~/.local/share/vm/macos15/data/`): the disk, the OpenCore boot disk, the
 recovery image and the machine identity. On btrfs (this host) the copy is a *reflink*: it takes
 a moment and uses no extra space until the VM changes the disk, and then only for the changed
 blocks. So you can keep several snapshots. On another file system it makes a full copy, about
@@ -270,7 +270,7 @@ installed raw disk is not converted. These are the trade-offs:
 | several snapshots | one folder each | all inside one file |
 
 If you want qcow2 anyway, start the VM with `DISK_FMT=qcow2 ./launch-macos.sh` for the first
-launch. `snapshot-macos.sh` still works with it, because it copies the whole of `macos-data/`.
+launch. `snapshot-macos.sh` still works with it, because it copies the whole data folder.
 
 ### Run at boot (systemd)
 
@@ -291,7 +291,7 @@ service gets the full 16 GB (an AMD host gets 8 GB until a data disk exists).
 To throw the VM away and install again, with no snapshot:
 
 1. `podman rm --force macos15`
-2. Delete the contents of `macos-data/`. Keep `shared/`, which holds the script and the Xcode `.xip`.
+2. Delete the contents of `~/.local/share/vm/macos15/data/`. Keep `shared/`, which holds the script and the Xcode `.xip`.
 3. `./launch-macos.sh`. It gives the install 8 GB again, because there is no data disk.
 4. Install macOS by hand (steps above).
 

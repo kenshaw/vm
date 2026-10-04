@@ -32,7 +32,7 @@ AddCapability=NET_ADMIN
 GroupAdd=keep-groups
 
 # the VM disk, and a folder shared with the VM (`sudo -S mount_9p shared` in macOS)
-Volume=@DIR@/macos-data:/storage
+Volume=@STORAGE@:/storage
 Volume=@DIR@/shared:/shared
 
 # time the guest gets to shut down when the service stops; after it, QEMU is killed

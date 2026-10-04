@@ -35,7 +35,7 @@ GroupAdd=keep-groups
 
 # the VM disk; a folder shared with the VM (drive Z:); and the same folder as /oem, whose
 # install.bat runs by itself at the end of a fresh install
-Volume=@DIR@/windows-data:/storage
+Volume=@STORAGE@:/storage
 Volume=@DIR@/shared:/shared
 Volume=@DIR@/shared:/oem
 

@@ -15,8 +15,9 @@
 HERE="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 export CONTAINER="${CONTAINER:-windows11}"
-export STORAGE="${STORAGE:-$HERE/windows-data}"
-export SNAPS="${SNAPS:-$HERE/snapshots}"
+VM_DATA="${VM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/vm}"
+export STORAGE="${STORAGE:-$VM_DATA/win11/data}"
+export SNAPS="${SNAPS:-$VM_DATA/win11/snapshots}"
 export LAUNCH="${LAUNCH:-$HERE/launch-windows.sh}"
 export TOOL="${TOOL:-$0}"
 

@@ -20,7 +20,9 @@ HERE="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CONTAINER_NAME="macos15"
 IMAGE="docker.io/dockurr/macos:latest"
-STORAGE_DIR="$HERE/macos-data"
+# the VM disk and the snapshots are not in this repository: they are in $VM_DATA/macos15/
+# (default ~/.local/share/vm/macos15/). STORAGE_DIR overrides the data folder.
+STORAGE_DIR="${STORAGE_DIR:-${VM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/vm}/macos15/data}"
 SHARED_DIR="$HERE/shared"
 
 VERSION="${VERSION:-15}"
@@ -70,7 +72,7 @@ if ! grep -qw avx2 /proc/cpuinfo; then
 fi
 
 # 4. Use less RAM for the first install on an AMD host
-# The VM's data disk is macos-data/<version>/data.img (or data.qcow2), and it is
+# The VM's data disk is <data folder>/<version>/data.img (or data.qcow2), and it is
 # created the first time the VM starts. So this is true only for the first launch.
 # The script cannot tell an install that is still going from one that has finished, so
 # run --recreate (which moves to the full RAM) only after macOS is installed.
