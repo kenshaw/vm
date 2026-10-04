@@ -153,9 +153,9 @@ To put a copy in the shared folder, run `sudo cp ~/setup-macos.log /Volumes/shar
 | 4 | **Xcode**, from the `.xip` in the shared folder (below) |
 | 5 | **Homebrew**: the official installer on Apple silicon, set up by hand on Intel (below) |
 | 6 | **command line tools**: the list from `notes/macos.md`, plus what the darwin part of `.bashrc` expects, plus git, gh, jq, node, python and rustup. With Homebrew, or with MacPorts on Intel (below). Then it makes the bash it installed your **login shell** and writes a plain **`~/.bashrc`** for it (below) |
-| 7 | casks: ghostty, iterm2, google-chrome, firefox and desktoppr. Then it clears the quarantine flag on the apps, makes **Firefox the default browser** and turns off the **first-run screens** of Firefox and Chrome (below) |
+| 7 | casks: iterm2, google-chrome, firefox and desktoppr. Then it clears the quarantine flag on the apps, makes **Firefox the default browser** and turns off the **first-run screens** of Firefox and Chrome (below) |
 | 8 | **default wallpaper** (below) |
-| 9 | **Dock**: System Settings, Firefox, Chrome, Ghostty, iTerm and the App Store, plus Applications and Downloads folders shown as a grid |
+| 9 | **Dock**: System Settings, Firefox, Chrome, iTerm and the App Store, plus Applications and Downloads folders shown as a grid |
 | 10 | Remote Login (ssh) on, and the `id_ed25519` key authorized |
 | 11 | **Go**, from `go-setup.sh` in `kenshaw/shell-config`, run last (below) |
 
@@ -315,7 +315,7 @@ override it with `--packages=` (or `PACKAGES`).
   source with all their dependencies. `neovim` alone builds 29 dependencies, including
   cmake and python. In an 8 CPU VM that takes hours.
 - `brew` itself still runs on Intel until **2027-09-01**, and casks still work. I
-  checked this on this VM: a hand-made Homebrew resolved Firefox, Chrome, Ghostty,
+  checked this on this VM: a hand-made Homebrew resolved Firefox, Chrome,
   gcloud and desktoppr.
 
 So on Intel the script does this:
@@ -359,7 +359,7 @@ Settings > Accessibility > Display. `tmutil disable` also needs Full Disk Access
 backup disk, so the script skips it when `tmutil destinationinfo` says "No destinations configured".
 
 **Casks that depend on a formula build it from source on Intel.** The casks in this
-script (Ghostty, iTerm2, Chrome, Firefox, desktoppr) are plain downloads. `gcloud-cli` was removed for
+script (iTerm2, Chrome, Firefox, desktoppr) are plain downloads. `gcloud-cli` was removed for
 this reason: its cask depends on the `python@3.14` formula, and with no bottles Homebrew
 compiled Python and everything it needs (`openssl@3`, `sqlite`, `readline`, `xz`, `zstd`,
 `lz4`, `cmake`, `pkgconf`) from source, which took tens of minutes. Check a cask with
@@ -462,12 +462,14 @@ out and in. macOS refuses some settings. The script lists them at the end. For
 Reduce Motion and Reduce Transparency, set them in **System Settings >
 Accessibility > Display**.
 
-### Terminals: Ghostty and iTerm2
+### Terminal: iTerm2, not Ghostty
 
-**Ghostty needs a GPU and does not start in this VM.** It draws with Metal on macOS and has no
-software renderer or setting to turn the GPU off (the Ghostty project has discussed a CPU renderer
-but has none). So the script also installs **iTerm2**, which works without a GPU, and pins it in the
-Dock next to Ghostty. Ghostty stays installed for a Mac or a Tart VM that has a GPU.
+The terminal is **iTerm2**, pinned in the Dock. **Ghostty is not installed: it needs a GPU and does
+not start in this VM.** It draws with Metal on macOS and has no software renderer or setting to turn
+the GPU off (the Ghostty project has discussed a CPU renderer but has none). To add it on a Mac or a
+Tart VM that has a GPU, add `ghostty` to `CASKS` and `"Ghostty"` to `CASK_APPS` in
+`shared/setup-macos.sh`, and `"$APPLICATIONS_DIR/Ghostty.app"` to the Dock list. A VM that
+already has Ghostty keeps it: the script only stops pinning it.
 
 ### Browsers: default browser and first run
 
@@ -589,7 +591,7 @@ If the link is missing, the script says so, and you set a wallpaper by hand in
 
 Homebrew downloads each cask, so macOS marks the app as quarantined. The first
 launch then asks "are you sure you want to open it". The script clears that flag on
-Firefox, Chrome, Ghostty and iTerm with `xattr -dr com.apple.quarantine`, and checks that
+Firefox, Chrome and iTerm with `xattr -dr com.apple.quarantine`, and checks that
 it is gone. It only touches those three apps. It does not turn Gatekeeper off.
 
 Homebrew no longer has `--no-quarantine`, and it dropped the `HOMEBREW_CASK_OPTS`

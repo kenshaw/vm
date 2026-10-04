@@ -22,13 +22,13 @@
 #      Homebrew, or with MacPorts on an Intel Mac (see PACKAGES below). It makes
 #      the bash it installs your login shell, in place of zsh, and writes a
 #      plain ~/.bash_profile and ~/.bashrc for it (see "bash config" below).
-#   7. installs the casks (ghostty, iterm2, chrome, firefox, desktoppr), then clears
-#      the download quarantine flag from the Firefox, Chrome, Ghostty and iTerm apps
-#      so they open without the "are you sure" prompt
+#   7. installs the casks (iterm2, chrome, firefox, desktoppr), then clears the
+#      download quarantine flag from the Firefox, Chrome and iTerm apps so they
+#      open without the "are you sure" prompt
 #   8. sets the default wallpaper of this macOS release (the aerial ones need
 #      a GPU and show as a white screen in a VM)
-#   9. sets up the Dock: System Settings, Firefox, Chrome, Ghostty, iTerm and the
-#      App Store, plus Applications and Downloads folders shown as a grid
+#   9. sets up the Dock: System Settings, Firefox, Chrome, iTerm and the App
+#      Store, plus Applications and Downloads folders shown as a grid
 #  10. turns on Remote Login (ssh) and authorizes a public key
 #  11. installs Go with go-setup.sh from github.com/kenshaw/shell-config, run as
 #      root with the new bash and the GNU tools (last: it builds Go from source)
@@ -210,10 +210,8 @@ PORTS=(
 )
 
 CASKS=(
-    ghostty
-
-    # Ghostty draws with Metal and does not start in a VM without a GPU. iTerm2 does
-    # not need one (it has a CPU renderer), so it is there for when Ghostty fails
+    # the terminal. Ghostty is not here: it draws with Metal and does not start in a
+    # VM without a GPU, and it has no software renderer
     iterm2
 
     google-chrome
@@ -228,7 +226,6 @@ CASKS=(
 CASK_APPS=(
     "Firefox"
     "Google Chrome"
-    "Ghostty"
     "iTerm"
 )
 
@@ -1747,7 +1744,6 @@ if [ "$SKIP_DOCK" = 0 ]; then
         "$SYSTEM_APPLICATIONS_DIR/System Settings.app" \
         "$APPLICATIONS_DIR/Firefox.app" \
         "$APPLICATIONS_DIR/Google Chrome.app" \
-        "$APPLICATIONS_DIR/Ghostty.app" \
         "$APPLICATIONS_DIR/iTerm.app" \
         "$SYSTEM_APPLICATIONS_DIR/App Store.app"; do
         if [ -d "$app" ]; then
