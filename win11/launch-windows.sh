@@ -9,7 +9,7 @@
 #               Use it to change the RAM, CPUs, disk size, ports or account.
 #   --no-oem    do not mount shared/ as /oem, so a fresh install does NOT run
 #               setup-dev.ps1 by itself. Use it to get a Windows that is installed but
-#               not set up: take a snapshot of it, then run Z:\setup-dev.ps1 by hand,
+#               not set up: take a snapshot of it, then run \\host.lan\Data\setup-dev.ps1 by hand,
 #               and restore the snapshot to try the script again.
 #   --dry-run   print the podman command and exit.
 #
@@ -124,7 +124,7 @@ fi
 # 3. Create the storage and shared directories if they don't exist
 mkdir -p "$STORAGE_DIR" "$SHARED_DIR"
 echo "Storage directory: $STORAGE_DIR"
-echo "Shared directory:  $SHARED_DIR  (drive Z: inside Windows, and C:\\OEM on a fresh install)"
+echo "Shared directory:  $SHARED_DIR  (\\\\host.lan\\Data inside Windows, drive Z: on some installs, and C:\\OEM on a fresh install)"
 
 # 4. Check if the container already exists
 if podman container exists "$CONTAINER_NAME"; then
@@ -152,10 +152,11 @@ podman run -d "${RUN_ARGS[@]}" "$IMAGE" > /dev/null
 echo "Container launched successfully."
 echo "Access the web viewer at http://localhost:$WEB_PORT"
 echo "The first-time installation takes 20-30 minutes, and needs no clicks."
-echo "Shared files appear in Windows on drive Z:"
+echo "Shared files appear in Windows at \\\\host.lan\\Data (and on drive Z: on some installs)"
 if [ "$OEM" = 1 ]; then
     echo "On a FRESH install, C:\\OEM\\install.bat runs by itself at the end of setup."
 else
-    echo "--no-oem: nothing runs by itself. Run Z:\\setup-dev.ps1 yourself when Windows is up."
+    echo "--no-oem: nothing runs by itself. Run \\\\host.lan\\Data\\setup-dev.ps1 yourself when Windows is up."
+    echo "(powershell -ExecutionPolicy Bypass -File \\\\host.lan\\Data\\setup-dev.ps1)"
 fi
 echo "Once sshd is running inside the VM: ssh -p $SSH_PORT $WIN_USERNAME@127.0.0.1"

@@ -14,7 +14,7 @@ user, in rootless Podman. Each has its own folder, launcher and README.
 | web viewer | http://localhost:8006 | http://localhost:8007 |
 | other ports | RDP 3389, ssh 2222 | VNC 5900, ssh 2223 |
 | account | `user` (password `admin` unless you set one) | `user`, which you create |
-| shared folder | `win11/shared` (drive `Z:`) | `macos15/shared` (`/Volumes/shared`) |
+| shared folder | `win11/shared` (`\\host.lan\Data`; drive `Z:` on some installs) | `macos15/shared` (`/Volumes/shared`) |
 | install | **by itself**, no clicks | **by hand** in the web viewer |
 | after install | runs by itself (`setup-dev.ps1`) | `bash /Volumes/shared/setup-macos.sh` |
 | packages | winget | Homebrew (casks) and MacPorts (tools) on Intel; Homebrew only on Apple silicon |

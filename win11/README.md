@@ -57,7 +57,7 @@ do not use elsewhere. The launcher never prints it.
 
 ## How the automation works
 
-1. `launch-windows.sh` mounts `shared/` twice: as `/shared` (drive **Z:** in Windows) and as
+1. `launch-windows.sh` mounts `shared/` twice: as `/shared` (**`\\host.lan\Data`** in Windows, and drive **Z:** on some installs; on a `--no-oem` install made here, only `\\host.lan\Data` existed) and as
    `/oem`.
 2. At the end of a **fresh** install, dockur copies `/oem` to `C:\OEM` and runs `install.bat` as
    SYSTEM.
@@ -80,7 +80,7 @@ The order is fixed, and activation is always first and cannot be skipped.
 | 4 | **OpenSSH server**: capability, sshd and ssh-agent automatic, firewall port 22, `DefaultShell`, and your key in `administrators_authorized_keys` (and in the profile of `user`, once it exists) |
 | 5 | **Firefox as the default browser**, through a policy file, which applies at the next sign-in |
 
-Options (for a run by hand, as `powershell -ExecutionPolicy Bypass -File Z:\setup-dev.ps1 ...`):
+Options (for a run by hand, as `powershell -ExecutionPolicy Bypass -File \\host.lan\Data\setup-dev.ps1 ...`):
 
 ```
 -User <name>       the Windows account (default: the one normal local account, else "user")
@@ -133,7 +133,7 @@ and the automatic hook would set it up during the install. So install with `--no
 
 1. `./launch-windows.sh --no-oem`. Windows installs, and nothing runs by itself.
 2. Take a snapshot: `./snapshot-windows.sh create installed`.
-3. In Windows, run `powershell -ExecutionPolicy Bypass -File Z:\setup-dev.ps1`.
+3. In Windows, run `powershell -ExecutionPolicy Bypass -File \\host.lan\Data\setup-dev.ps1` (use `Z:\setup-dev.ps1` if drive Z: exists).
 4. To try again: `./snapshot-windows.sh restore installed --yes --start`.
 
 `--no-oem` only matters when the container is created.

@@ -33,7 +33,7 @@ AddDevice=/dev/net/tun
 AddCapability=NET_ADMIN
 GroupAdd=keep-groups
 
-# the VM disk; a folder shared with the VM (drive Z:); and the same folder as /oem, whose
+# the VM disk; a folder shared with the VM (\\host.lan\Data in Windows; drive Z: on some installs); and the same folder as /oem, whose
 # install.bat runs by itself at the end of a fresh install
 Volume=@STORAGE@:/storage
 Volume=@DIR@/shared:/shared
