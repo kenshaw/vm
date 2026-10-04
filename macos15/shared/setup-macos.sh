@@ -277,7 +277,6 @@ done
 PLISTBUDDY=/usr/libexec/PlistBuddy
 LSHANDLERS_PLIST="${LSHANDLERS_PLIST:-$HOME/Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist}"
 FIREFOX_DISTRIBUTION="${FIREFOX_DISTRIBUTION:-$APPLICATIONS_DIR/Firefox.app/Contents/Resources/distribution}"
-CHROME_POLICY_PLIST="${CHROME_POLICY_PLIST:-/Library/Managed Preferences/com.google.Chrome.plist}"
 CHROME_DATA_DIR="${CHROME_DATA_DIR:-$HOME/Library/Application Support/Google/Chrome}"
 
 # set_default_browser <bundle id>: writes the handlers of http, https and html files into
@@ -380,17 +379,14 @@ set_firefox_policies() {
     esac
 }
 
-# set_chrome_policies: Chrome skips its welcome screen when a "First Run" file is in its
-# data folder, and reads managed preferences from /Library/Managed Preferences (a system
-# folder, so this needs sudo). The policies stop the "make Chrome your default browser"
-# bar, the usage statistics question, the sign-in prompt and the promotional tabs.
-# Chrome says "managed by your organization" in its menu, and that is the price. Chrome
-# may ignore some policies on a Mac that no MDM manages; these are not among the sensitive
-# ones. If a prompt still comes up, it has to be answered once, by hand.
-set_chrome_policies() {
-    local P="$CHROME_POLICY_PLIST" i key kind val line first="$CHROME_DATA_DIR/First Run"
-    step 'Chrome: no welcome screen or prompts'
-    CHROME_CHANGED=0
+# set_chrome_first_run: Chrome skips its welcome screen when a "First Run" file is in its
+# data folder. That is all this does. Chrome policies are left out on purpose: they would
+# have to be in /Library/Managed Preferences, and macOS erases that folder at every
+# start. Chrome may still show its other prompts (default browser, sign-in, keychain)
+# once; answer them by hand.
+set_chrome_first_run() {
+    local first="$CHROME_DATA_DIR/First Run"
+    step 'Chrome: no welcome screen'
     if [ ! -d "$APPLICATIONS_DIR/Google Chrome.app" ] && [ -z "${CHROME_FORCE:-}" ]; then
         skip 'Chrome is not installed'
         return 0
@@ -401,29 +397,6 @@ set_chrome_policies() {
         ok "wrote $first"
     else
         fail "could not write $first"
-    fi
-
-    for line in 'DefaultBrowserSettingEnabled bool false' 'MetricsReportingEnabled bool false' \
-                'BrowserSignin integer 0' 'PromotionalTabsEnabled bool false'; do
-        key="${line%% *}"; line="${line#* }"; kind="${line%% *}"; val="${line#* }"
-        if [ "$(sudo "$PLISTBUDDY" -c "Print :$key" "$P" 2>/dev/null)" = "$val" ]; then
-            continue
-        fi
-        sudo mkdir -p "$(dirname "$P")"
-        if sudo "$PLISTBUDDY" -c "Set :$key $val" "$P" >/dev/null 2>&1 \
-            || sudo "$PLISTBUDDY" -c "Add :$key $kind $val" "$P" >/dev/null 2>&1; then
-            CHROME_CHANGED=1
-        else
-            fail "could not set the Chrome policy $key"
-        fi
-    done
-    sudo chown root:wheel "$P" 2>/dev/null || true
-    sudo chmod 644 "$P" 2>/dev/null || true
-    if [ "${CHROME_CHANGED:-0}" = 1 ]; then
-        killall cfprefsd >/dev/null 2>&1 || true
-        ok "wrote the Chrome policies to $P"
-    else
-        skip "the Chrome policies in $P are as they should be"
     fi
 }
 
@@ -1666,7 +1639,7 @@ if [ "$SKIP_CASKS" = 0 ]; then
             skip 'Firefox is not installed'
         fi
         set_firefox_policies
-        set_chrome_policies
+        set_chrome_first_run
     fi
 fi
 

@@ -153,7 +153,7 @@ To put a copy in the shared folder, run `sudo cp ~/setup-macos.log /Volumes/shar
 | 4 | **Xcode**, from the `.xip` in the shared folder (below) |
 | 5 | **Homebrew**: the official installer on Apple silicon, set up by hand on Intel (below) |
 | 6 | **command line tools**: the list from `notes/macos.md`, plus what the darwin part of `.bashrc` expects, plus git, gh, jq, node, python and rustup. With Homebrew, or with MacPorts on Intel (below). Then it makes the bash it installed your **login shell** and writes a plain **`~/.bashrc`** for it (below) |
-| 7 | casks: iterm2, google-chrome, firefox and desktoppr. Then it clears the quarantine flag on the apps, makes **Firefox the default browser** and turns off the **first-run screens** of Firefox and Chrome (below) |
+| 7 | casks: iterm2, google-chrome, firefox and desktoppr. Then it clears the quarantine flag on the apps, makes **Firefox the default browser** and turns off the **first-run screens** of Firefox and Chrome's welcome screen (below) |
 | 8 | **default wallpaper** (below) |
 | 9 | **Dock**: System Settings, Firefox, Chrome, iTerm and the App Store, plus Applications and Downloads folders shown as a grid |
 | 10 | Remote Login (ssh) on, and the `id_ed25519` key authorized |
@@ -493,13 +493,16 @@ already has Ghostty keeps it: the script only stops pinning it.
   default" bar and no telemetry notice. Firefox then says "managed by your organization" in its
   menu. An update that replaces the app removes the file: run the script again.
 - **Chrome's welcome screen** is off by a `First Run` file in
-  `~/Library/Application Support/Google/Chrome/`, and its prompts by policies in
-  `/Library/Managed Preferences/com.google.Chrome.plist` (no default-browser bar, no usage-statistics
-  question, no sign-in prompt, no promotional tabs). Chrome says "managed by your organization" too.
-- **Not tested in a real Chrome start:** the files are written and read back, but nobody has opened
-  Chrome and Firefox in a restored VM to see that no screen comes up. Chrome may ignore some policies
-  on a Mac that no MDM manages. **Not covered:** the macOS keychain question ("Chrome wants to use
-  your confidential information stored in Chrome Safe Storage"), which has to be answered once.
+  `~/Library/Application Support/Google/Chrome/`. That is all. **Chrome policies are not set, on
+  purpose.** They would have to be in `/Library/Managed Preferences/com.google.Chrome.plist`, and
+  macOS erases that folder at every start (checked on this VM: the file written by the script was
+  gone after the next boot). So Chrome may still ask its other first-run questions once: the
+  default-browser bar, sign-in and the macOS keychain question ("Chrome wants to use your confidential
+  information stored in Chrome Safe Storage"). Answer them by hand. A profile that was started under
+  the old policy file stopped opening windows after a restart; a new profile works (move
+  `~/Library/Application Support/Google/Chrome` aside to get one).
+- **Not tested:** nobody has opened Firefox in a restored VM to see that no first-run screen comes up
+  there; Firefox did open fine after the setup run.
 - `--skip-browsers` leaves all of this out.
 
 ### Key repeat
