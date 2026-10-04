@@ -21,7 +21,7 @@
     powershell -ExecutionPolicy Bypass -File .\setup-dev.ps1
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File .\setup-dev.ps1 -BuildTools -RebootIfNeeded
+    powershell -ExecutionPolicy Bypass -File .\setup-dev.ps1 -SkipBuildTools -RebootIfNeeded
 #>
 
 [CmdletBinding()]
@@ -47,7 +47,11 @@ param(
     # reboot automatically when Windows Update asks for it
     [switch]$RebootIfNeeded,
 
-    # also install the Visual Studio 2022 C++ build tools (large, ~5GB)
+    # leave out the Visual Studio 2022 C++ build tools, which are installed by default
+    # (large, ~5GB, and slow)
+    [switch]$SkipBuildTools,
+
+    # accepted and ignored: the build tools are the default now (use -SkipBuildTools)
     [switch]$BuildTools,
 
     # skip individual phases (activation is never skipped)
@@ -429,7 +433,7 @@ if (-not $SkipWinget) {
         Install-Pkg 'OpenJS.NodeJS.LTS'             'node lts'
         Install-Pkg 'Python.Python.3.13'            'python 3.13'
         Install-Pkg 'Microsoft.VCRedist.2015+.x64'  'vc++ redist'
-        if ($BuildTools) {
+        if (-not $SkipBuildTools) {
             Install-Pkg 'Microsoft.VisualStudio.2022.BuildTools' 'vs 2022 build tools' `
                 -Extra @('--override','--quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended')
         }

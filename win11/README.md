@@ -89,7 +89,8 @@ Options (for a run by hand, as `powershell -ExecutionPolicy Bypass -File \\host.
 -RebootIfNeeded    reboot when Windows Update asks for it
 -UpdatePasses <n>  update rounds to run (default 3)
 -KmsHost <host>    KMS host for activation (default kms8.msguides.com)
--BuildTools        also install the VS 2022 C++ build tools (about 5 GB)
+-SkipBuildTools    leave out the VS 2022 C++ build tools, which are installed by default (about 5 GB;
+                   -BuildTools is still accepted and does nothing)
 -SkipUpdates -SkipWinget -SkipSsh -SkipBrowser
 ```
 
