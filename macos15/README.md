@@ -60,7 +60,8 @@ shows in the web viewer.
 Options: `--dry-run` prints the podman command. These variables in the environment
 change the settings: `RAM_SIZE`, `CPU_CORES`, `DISK_SIZE`, `VERSION`, `WEB_PORT`,
 `VNC_PORT` and `SSH_PORT`. The launcher needs `/dev/kvm` and a CPU with AVX2, and
-checks for both.
+checks for both. `QEMU_ARGUMENTS` sets extra QEMU options, and by default removes the
+virtual PS/2 keyboard (see *No PS/2 keyboard* below).
 
 ## 2. Install macOS by hand
 
@@ -457,6 +458,10 @@ It runs second, so the VM does not sleep or lock during the long installs.
   macOS 15, so they stay. The Mail ones are gone, because there is no Mail account.
 - **Natural scrolling** is off, so the mouse wheel scrolls the usual way. It is one
   setting for the mouse and the trackpad.
+- **"Click wallpaper to reveal desktop" is off** (`com.apple.WindowManager
+  EnableStandardClickToShowDesktop`). Otherwise a click on the wallpaper moves all the windows
+  aside, which happens by accident in a VM when you switch windows or click in the web viewer to
+  give the browser the focus. The Dock restarts to apply it.
 - **Spotlight indexing and Time Machine** are off. They use CPU and disk for nothing.
 - **Keys repeat fast.** macOS repeats a held key every 90 ms after 375 ms, which is slow, most of
   all through the web viewer. The script sets 30 ms after 225 ms (the fastest that System Settings
@@ -524,15 +529,16 @@ settings are the ones that count. By hand: `defaults write -g KeyRepeat -int 2`,
 The VM's keyboard is a virtual USB keyboard from QEMU. It does not say whether it is ANSI, ISO or
 JIS, so macOS runs the **Keyboard Setup Assistant** to ask, and it asks again at a start if it has
 no saved answer. macOS keeps the answer in `/Library/Preferences/com.apple.keyboardtype.plist`, under
-the name `<vendor id>-<product id>-<country code>`, as a number: 40 is ANSI, 41 is ISO, 42 is JIS.
+the name `<product id>-<vendor id>-<country code>` (product first, as the loginwindow log shows it:
+`copykeyboardtype, productID:1, vendorID:1575`), as a number: 40 is ANSI, 41 is ISO, 42 is JIS.
 
 The tuning phase writes that answer for every keyboard macOS can see (found with `ioreg`), and for
-QEMU's keyboard (`1575-1-0`) in case it is not connected yet, and then closes an Assistant that is
+QEMU's keyboard (`1-1575-0`) in case it is not connected yet, and then closes an Assistant that is
 open. It skips what is saved already. `KEYBOARD_TYPE=iso` or `jis` picks another layout, and
 `--skip-keyboard` skips the step.
 
 By hand, in the VM: `sudo defaults write /Library/Preferences/com.apple.keyboardtype keyboardtype
--dict-add 1575-1-0 -int 40` (take the numbers from `ioreg -r -c IOHIDDevice -l | grep -E
+-dict-add 1-1575-0 -int 40` (take the numbers from `ioreg -r -c IOHIDDevice -l | grep -E
 'VendorID|ProductID|CountryCode'`). Or answer the Assistant to the end: press Z when it asks for the
 key right of the left Shift, then / for the key left of the right Shift.
 
@@ -792,3 +798,23 @@ Where the facts in this document came from:
 - **go-setup.sh:** [scripts/go-setup.sh in kenshaw/shell-config](https://github.com/kenshaw/shell-config/blob/HEAD/scripts/go-setup.sh).
   Its header says it needs `curl`, `gawk` and `gnu-sed` on macOS.
 - **dockur/macos** (the image, ports, `mount_9p`): [its readme](https://github.com/dockur/macos).
+
+## No PS/2 keyboard
+
+The VM is made with `-machine i8042=off`, which removes QEMU's virtual PS/2 keyboard
+controller. Only the USB keyboard is left.
+
+**Why:** macOS saw two keyboards. The USB one is recognized once it has been set to ANSI.
+The PS/2 one shows up as an "Apple" keyboard with product 65535, and macOS reported it as
+unknown (`Unknown KeyboardAdded`, in the loginwindow log) at every login, so the Keyboard
+Setup Assistant started at every boot. The ANSI type was stored for it
+(`65535-1452-0` in `/Library/Preferences/com.apple.keyboardtype.plist`) and was not used.
+Storing it again does not help. Without the PS/2 keyboard there is nothing to ask about.
+
+**What to do:** the setting is read when the container is made, so an existing VM needs
+`./launch-macos.sh --recreate` (the disk is kept), or `./install.sh macos15` and a restart
+of the service. To keep the PS/2 keyboard, set `QEMU_ARGUMENTS=` (empty).
+
+To check, in the VM: `ioreg -r -c IOHIDDevice -l | grep -E '"Product"|"Transport"'` should
+list the USB keyboard and tablet and no `PS2` transport. The loginwindow log should have no
+`Unknown KeyboardAdded` line after the boot.

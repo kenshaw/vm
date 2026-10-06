@@ -13,6 +13,11 @@
 # be set in the environment to override the values below. So can DISK_FMT, which is
 # the format of the VM disk: raw (the image's default) or qcow2. It only matters
 # before the install: changing it later does not convert an installed disk.
+#
+# QEMU_ARGUMENTS holds extra options for QEMU, which the image reads as ARGUMENTS. The
+# default is "-machine i8042=off", which removes the virtual PS/2 keyboard. See "No PS/2
+# keyboard" in README.md. Set it to an empty string to keep that keyboard. A change needs
+# --recreate: a container keeps the hardware it was made with.
 
 set -e
 
@@ -34,6 +39,8 @@ DISK_SIZE="${DISK_SIZE:-100G}"
 RAM_SIZE="${RAM_SIZE:-16G}"
 CPU_CORES="${CPU_CORES:-8}"
 DISK_FMT="${DISK_FMT:-}"
+# Without "-" before the "-machine", an empty value could not turn this off.
+QEMU_ARGUMENTS="${QEMU_ARGUMENTS--machine i8042=off}"
 
 # the windows11 container holds 8006 and 2222, so these differ from the
 # image defaults
@@ -109,6 +116,9 @@ RUN_ARGS=(
 )
 if [ -n "$DISK_FMT" ]; then
     RUN_ARGS+=(-e DISK_FMT="$DISK_FMT")
+fi
+if [ -n "$QEMU_ARGUMENTS" ]; then
+    RUN_ARGS+=(-e ARGUMENTS="$QEMU_ARGUMENTS")
 fi
 
 if [ "$DRY_RUN" = 1 ]; then

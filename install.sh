@@ -34,6 +34,8 @@
 # These can be set in the environment, for one VM at a time:
 #   RAM_SIZE  CPU_CORES  DISK_SIZE  VERSION  WEB_PORT  SSH_PORT
 #   VNC_PORT (macos15)  RDP_PORT (win11)  DISK_FMT (raw or qcow2)
+#   QEMU_ARGUMENTS (macos15, default: -machine i8042=off, which removes the PS/2 keyboard;
+#   an empty string keeps it)
 #   WIN_USERNAME (win11, default: user)  WIN_PASSWORD (win11, default: the image's "admin")
 #
 # The Windows account is made when Windows is installed. Changing it here does nothing for
@@ -106,7 +108,7 @@ VMS=("${UNIQUE[@]}")
 
 # a setting in the environment is for one VM: macos15 and win11 do not share defaults
 if [ "${#VMS[@]}" -gt 1 ]; then
-    for v in RAM_SIZE CPU_CORES DISK_SIZE VERSION WEB_PORT SSH_PORT VNC_PORT RDP_PORT DISK_FMT WIN_USERNAME WIN_PASSWORD; do
+    for v in RAM_SIZE CPU_CORES DISK_SIZE VERSION WEB_PORT SSH_PORT VNC_PORT RDP_PORT DISK_FMT QEMU_ARGUMENTS WIN_USERNAME WIN_PASSWORD; do
         [ -z "${!v:-}" ] || die "$v is set, and more than one VM is named. Install them one at a time to change a setting."
     done
 fi
@@ -148,6 +150,12 @@ load_vm() {
             V_RDP_PORT=""
             if [ -n "${DISK_FMT:-}" ]; then
                 V_EXTRA_ENV="$(quadlet_env DISK_FMT "$DISK_FMT")"
+            fi
+            # no PS/2 keyboard, as in launch-macos.sh. "-" and not ":-", so an empty value
+            # in the environment turns it off.
+            V_QEMU_ARGUMENTS="${QEMU_ARGUMENTS--machine i8042=off}"
+            if [ -n "$V_QEMU_ARGUMENTS" ]; then
+                V_EXTRA_ENV="${V_EXTRA_ENV:+$V_EXTRA_ENV$'\n'}$(quadlet_env ARGUMENTS "$V_QEMU_ARGUMENTS")"
             fi
             ;;
         win11)

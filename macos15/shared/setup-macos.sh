@@ -580,15 +580,19 @@ trap 'kill "$SUDO_KEEPALIVE" 2>/dev/null; [ -n "${ASKPASS_DIR:-}" ] && rm -rf "$
 KEYBOARD_PLIST="${KEYBOARD_PLIST:-/Library/Preferences/com.apple.keyboardtype}"
 KEYBOARD_TYPE="${KEYBOARD_TYPE:-ansi}"
 
-# keyboard_ids: one "vendor-product-country" for each keyboard macOS can see. The
-# Keyboard Setup Assistant saves its answer under that name, and a QEMU keyboard does
-# not say which layout it has, so macOS asks again whenever the answer is missing.
+# keyboard_ids: one "product-vendor-country" for each keyboard macOS can see. The
+# Keyboard Setup Assistant saves its answer under that name (product first: the
+# loginwindow log says "copykeyboardtype, productID:1, vendorID:1575, countryCode:0",
+# and the saved name is 1-1575-0), and a QEMU keyboard does not say which layout it
+# has, so macOS asks again whenever the answer is missing.
 # A keyboard is a HID device with usage page 1 and usage 6. The ids are in decimal.
-# Product id 65535 is the placeholder of a virtual keyboard that macOS makes itself
-# (Apple vendor 1452); it is never asked about, so it is left out.
+# Product id 65535 is QEMU's virtual PS/2 keyboard, which macOS sees as an Apple
+# keyboard (vendor 1452). macOS asks about it at every start even when an answer is
+# saved, so saving one does not help, and it is left out. The launcher removes that
+# keyboard from the VM (-machine i8042=off), which is the real fix.
 keyboard_ids() {
     ioreg -r -c IOHIDDevice -l -w0 2>/dev/null | awk '
-        function flush() { if (page == 1 && usage == 6 && vendor != "" && product != "" && product != 65535) print vendor "-" product "-" (country == "" ? 0 : country) }
+        function flush() { if (page == 1 && usage == 6 && vendor != "" && product != "" && product != 65535) print product "-" vendor "-" (country == "" ? 0 : country) }
         /\+-o / { flush(); vendor = product = country = page = usage = "" }
         /"VendorID" = /        { vendor = $NF }
         /"ProductID" = /       { product = $NF }
@@ -599,7 +603,7 @@ keyboard_ids() {
 }
 
 # set_keyboard_type: saves the layout for every keyboard that is connected now, and for
-# the QEMU keyboard (1575-1-0), so that the Keyboard Setup Assistant does not come up at
+# the QEMU keyboard (1-1575-0), so that the Keyboard Setup Assistant does not come up at
 # every start. The values are 40 for ANSI, 41 for ISO and 42 for JIS.
 set_keyboard_type() {
     local code id ids missing=0 now
@@ -610,7 +614,7 @@ set_keyboard_type() {
         jis|JIS)   code=42 ;;
         *) fail "KEYBOARD_TYPE is '$KEYBOARD_TYPE'; use ansi, iso or jis"; return 0 ;;
     esac
-    ids="$(printf '%s\n%s\n' "$(keyboard_ids)" '1575-1-0' | sed '/^$/d' | sort -u)"
+    ids="$(printf '%s\n%s\n' "$(keyboard_ids)" '1-1575-0' | sed '/^$/d' | sort -u)"
     now="$(sudo defaults read "$KEYBOARD_PLIST" keyboardtype 2>/dev/null || true)"
     for id in $ids; do
         if printf '%s\n' "$now" | grep -Eq "\"?$id\"? = $code;"; then
@@ -765,6 +769,12 @@ if [ "$SKIP_TUNING" = 0 ]; then
     # com.apple.Accessibility is accepted and stays below. Mail has no account in this VM, so its
     # animation keys are gone.
     #
+    # com.apple.WindowManager EnableStandardClickToShowDesktop false turns off "Click
+    # wallpaper to reveal desktop" (System Settings > Desktop & Dock > Desktop &
+    # Stage Manager). With it on, a click on the wallpaper moves every window aside,
+    # which happens by accident all the time in a VM: switching windows, and clicking in
+    # the web viewer to give the browser the focus.
+    #
     # com.apple.swipescrolldirection false turns off Natural scrolling, so the
     # mouse wheel scrolls the usual way. It is one setting for the mouse and the
     # trackpad, and it also shows only after a log out and in.
@@ -793,6 +803,7 @@ com.apple.dock|no-bouncing|bool|true
 com.apple.dock|mineffect|string|scale
 com.apple.dock|show-recents|bool|false
 com.apple.Accessibility|ReduceMotionEnabled|int|1
+com.apple.WindowManager|EnableStandardClickToShowDesktop|bool|false
 EOF
 
     # ---- background work that burns the VM's CPU and disk ----
